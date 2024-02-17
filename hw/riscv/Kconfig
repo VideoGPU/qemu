@@ -74,6 +74,7 @@ config SIFIVE_E
     select SIFIVE_GPIO
     select SIFIVE_PLIC
     select SIFIVE_UART
+    select NEORV32_SYSINFO_QEMU
     select SIFIVE_E_PRCI
     select SIFIVE_E_AON
     select UNIMP
@@ -91,6 +92,7 @@ config SIFIVE_U
     select SIFIVE_PLIC
     select SIFIVE_SPI
     select SIFIVE_UART
+    select NEORV32_SYSINFO_QEMU    
     select SIFIVE_U_OTP
     select SIFIVE_U_PRCI
     select SIFIVE_PWM

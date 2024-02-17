@@ -68,8 +68,8 @@ static bool virt_aclint_allowed(void)
 }
 
 static const MemMapEntry virt_memmap[] = {
-    [VIRT_DEBUG] =        {        0x0,         0x100 },
-    [VIRT_MROM] =         {     0x1000,        0xf000 },
+//    [VIRT_DEBUG] =        {        0x0,         0x100 },
+    [VIRT_MROM] =         {     0x0000,        0xf000 },
     [VIRT_TEST] =         {   0x100000,        0x1000 },
     [VIRT_RTC] =          {   0x101000,        0x1000 },
     [VIRT_CLINT] =        {  0x2000000,       0x10000 },
@@ -87,7 +87,9 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_IMSIC_S] =      { 0x28000000, VIRT_IMSIC_MAX_SIZE },
     [VIRT_PCIE_ECAM] =    { 0x30000000,    0x10000000 },
     [VIRT_PCIE_MMIO] =    { 0x40000000,    0x40000000 },
-    [VIRT_DRAM] =         { 0x80000000,           0x0 },
+//    [VIRT_DRAM] =         { 0x80000000,           0x0 }, //original
+    [VIRT_DRAM] =         { 0x80000000,       0x10000 },  //michael
+    [VIRT_DEBUG] =        { 0x80000000 + 0x10000,         0x100 }, //michael
 };
 
 /* PCIe high mmio is fixed for RV32 */
