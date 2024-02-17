@@ -49,9 +49,16 @@
 #include "chardev/char.h"
 #include "sysemu/sysemu.h"
 
+#include "hw/misc/neorv32_sysinfo.h"
+
 static const MemMapEntry sifive_e_memmap[] = {
-    [SIFIVE_E_DEV_DEBUG] =    {        0x0,     0x1000 },
-    [SIFIVE_E_DEV_MROM] =     {     0x1000,     0x2000 },
+
+//    [SIFIVE_E_DEV_DEBUG] =    {        0x0,     0x1000 },
+//    [SIFIVE_E_DEV_MROM] =     {     0x1000,     0x2000 },
+//    [SIFIVE_E_DEV_MROM] =     {     0x0,     0x8000 }, //Michael 32K IMEM - for hello_world etc
+    [SIFIVE_E_DEV_MROM] =     {     0xFFFFC000, 0x2000 }, //Michael 32K IMEM - for bootloader etc
+    [SIFIVE_E_DEV_DEBUG] =    {     0x8000,     0x1000 }, //Michael
+
     [SIFIVE_E_DEV_OTP] =      {    0x20000,     0x2000 },
     [SIFIVE_E_DEV_CLINT] =    {  0x2000000,    0x10000 },
     [SIFIVE_E_DEV_PLIC] =     {  0xc000000,  0x4000000 },
@@ -59,7 +66,8 @@ static const MemMapEntry sifive_e_memmap[] = {
     [SIFIVE_E_DEV_PRCI] =     { 0x10008000,     0x8000 },
     [SIFIVE_E_DEV_OTP_CTRL] = { 0x10010000,     0x1000 },
     [SIFIVE_E_DEV_GPIO0] =    { 0x10012000,     0x1000 },
-    [SIFIVE_E_DEV_UART0] =    { 0x10013000,     0x1000 },
+//    [SIFIVE_E_DEV_UART0] =    { 0x10013000,     0x1000 }, //Original
+    [SIFIVE_E_DEV_UART0] =    { 0xFFFFF500U,     0x100 }, //Michael, neorv32 uart0
     [SIFIVE_E_DEV_QSPI0] =    { 0x10014000,     0x1000 },
     [SIFIVE_E_DEV_PWM0] =     { 0x10015000,     0x1000 },
     [SIFIVE_E_DEV_UART1] =    { 0x10023000,     0x1000 },
@@ -68,7 +76,8 @@ static const MemMapEntry sifive_e_memmap[] = {
     [SIFIVE_E_DEV_QSPI2] =    { 0x10034000,     0x1000 },
     [SIFIVE_E_DEV_PWM2] =     { 0x10035000,     0x1000 },
     [SIFIVE_E_DEV_XIP] =      { 0x20000000, 0x20000000 },
-    [SIFIVE_E_DEV_DTIM] =     { 0x80000000,     0x4000 }
+    [SIFIVE_E_DEV_DTIM] =     { 0x80000000,     0x4000 },
+	[SIFIVE_NEORV32_SYSINFO] =       { NEORV32_SYSINFO_BASE,     0x100  },//Michael, neorv32 NEORV32_SYSINFO_BASE
 };
 
 static void sifive_e_machine_init(MachineState *machine)
@@ -261,6 +270,10 @@ static void sifive_e_soc_realize(DeviceState *dev, Error **errp)
 
     sifive_uart_create(sys_mem, memmap[SIFIVE_E_DEV_UART0].base,
         serial_hd(0), qdev_get_gpio_in(DEVICE(s->plic), SIFIVE_E_UART0_IRQ));
+
+    neorv32_sysinfo_create(sys_mem, memmap[SIFIVE_NEORV32_SYSINFO].base,
+            serial_hd(0), qdev_get_gpio_in(DEVICE(s->plic), 0));
+
     create_unimplemented_device("riscv.sifive.e.qspi0",
         memmap[SIFIVE_E_DEV_QSPI0].base, memmap[SIFIVE_E_DEV_QSPI0].size);
     create_unimplemented_device("riscv.sifive.e.pwm0",
