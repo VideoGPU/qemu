@@ -49,9 +49,17 @@
 #include "chardev/char.h"
 #include "sysemu/sysemu.h"
 
+#include "hw/misc/neorv32_sysinfo.h"
+#include "hw/char/neorv32q_uart.h"
+
 static const MemMapEntry sifive_e_memmap[] = {
-    [SIFIVE_E_DEV_DEBUG] =    {        0x0,     0x1000 },
-    [SIFIVE_E_DEV_MROM] =     {     0x1000,     0x2000 },
+
+//    [SIFIVE_E_DEV_DEBUG] =    {        0x0,     0x1000 },
+//    [SIFIVE_E_DEV_MROM] =     {     0x1000,     0x2000 },
+//    [SIFIVE_E_DEV_MROM] =     {     0x0,     0x8000 }, //Michael 32K IMEM - for hello_world etc
+    [SIFIVE_E_DEV_MROM] =     {     0xFFFFC000, 0x2000 }, //Michael 32K IMEM - for bootloader etc
+    [SIFIVE_E_DEV_DEBUG] =    {     0x8000,     0x1000 }, //Michael
+
     [SIFIVE_E_DEV_OTP] =      {    0x20000,     0x2000 },
     [SIFIVE_E_DEV_CLINT] =    {  0x2000000,    0x10000 },
     [SIFIVE_E_DEV_PLIC] =     {  0xc000000,  0x4000000 },
@@ -59,7 +67,7 @@ static const MemMapEntry sifive_e_memmap[] = {
     [SIFIVE_E_DEV_PRCI] =     { 0x10008000,     0x8000 },
     [SIFIVE_E_DEV_OTP_CTRL] = { 0x10010000,     0x1000 },
     [SIFIVE_E_DEV_GPIO0] =    { 0x10012000,     0x1000 },
-    [SIFIVE_E_DEV_UART0] =    { 0x10013000,     0x1000 },
+    [SIFIVE_E_DEV_UART0] =    { 0x10013000,     0x1000 }, //Original
     [SIFIVE_E_DEV_QSPI0] =    { 0x10014000,     0x1000 },
     [SIFIVE_E_DEV_PWM0] =     { 0x10015000,     0x1000 },
     [SIFIVE_E_DEV_UART1] =    { 0x10023000,     0x1000 },
@@ -68,7 +76,10 @@ static const MemMapEntry sifive_e_memmap[] = {
     [SIFIVE_E_DEV_QSPI2] =    { 0x10034000,     0x1000 },
     [SIFIVE_E_DEV_PWM2] =     { 0x10035000,     0x1000 },
     [SIFIVE_E_DEV_XIP] =      { 0x20000000, 0x20000000 },
-    [SIFIVE_E_DEV_DTIM] =     { 0x80000000,     0x4000 }
+    [SIFIVE_E_DEV_DTIM] =     { 0x80000000,     0x4000 },
+	[SIFIVE_NEORV32_SYSINFO] = { NEORV32_SYSINFO_BASE,   0x100  },//Michael, neorv32 NEORV32_SYSINFO_BASE
+	[SIFIVE_NEORV32_UART0]   = { NEORV32_UART0_BASE,     0x100  },//Michael, neorv32 NEORV32_UART0_BASE
+
 };
 
 static void sifive_e_machine_init(MachineState *machine)
@@ -111,8 +122,14 @@ static void sifive_e_machine_init(MachineState *machine)
     for (i = 0; i < sizeof(reset_vec) >> 2; i++) {
         reset_vec[i] = cpu_to_le32(reset_vec[i]);
     }
-    rom_add_blob_fixed_as("mrom.reset", reset_vec, sizeof(reset_vec),
-                          memmap[SIFIVE_E_DEV_MROM].base, &address_space_memory);
+//    rom_add_blob_fixed_as("mrom.reset", reset_vec, sizeof(reset_vec),
+//                          memmap[SIFIVE_E_DEV_MROM].base, &address_space_memory);
+
+    //Neorv32 bios
+    if (machine->firmware) {
+		riscv_find_and_load_firmware(machine, machine->firmware,
+				memmap[SIFIVE_E_DEV_MROM].base, NULL);
+    }
 
     if (machine->kernel_filename) {
         riscv_load_kernel(machine, &s->soc.cpus,
@@ -183,7 +200,8 @@ static void sifive_e_soc_init(Object *obj)
     object_initialize_child(obj, "cpus", &s->cpus, TYPE_RISCV_HART_ARRAY);
     object_property_set_int(OBJECT(&s->cpus), "num-harts", ms->smp.cpus,
                             &error_abort);
-    object_property_set_int(OBJECT(&s->cpus), "resetvec", 0x1004, &error_abort);
+    //object_property_set_int(OBJECT(&s->cpus), "resetvec", 0x1004, &error_abort); //Origin
+    object_property_set_int(OBJECT(&s->cpus), "resetvec", 0xFFFFC000, &error_abort); //Neorv32 Start address
     object_initialize_child(obj, "riscv.sifive.e.gpio0", &s->gpio,
                             TYPE_SIFIVE_GPIO);
     object_initialize_child(obj, "riscv.sifive.e.aon", &s->aon,
@@ -261,6 +279,15 @@ static void sifive_e_soc_realize(DeviceState *dev, Error **errp)
 
     sifive_uart_create(sys_mem, memmap[SIFIVE_E_DEV_UART0].base,
         serial_hd(0), qdev_get_gpio_in(DEVICE(s->plic), SIFIVE_E_UART0_IRQ));
+
+    //---NEORV32----//
+    neorv32_sysinfo_create(sys_mem, memmap[SIFIVE_NEORV32_SYSINFO].base,
+            serial_hd(0), qdev_get_gpio_in(DEVICE(s->plic), 0));
+
+    neorv32_uart_create(sys_mem, memmap[SIFIVE_NEORV32_UART0].base,
+        serial_hd(0), qdev_get_gpio_in(DEVICE(s->plic), SIFIVE_E_UART0_IRQ));
+    //---END OF NEORV32----//
+
     create_unimplemented_device("riscv.sifive.e.qspi0",
         memmap[SIFIVE_E_DEV_QSPI0].base, memmap[SIFIVE_E_DEV_QSPI0].size);
     create_unimplemented_device("riscv.sifive.e.pwm0",
