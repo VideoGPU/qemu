@@ -32,7 +32,6 @@ OBJECT_DECLARE_SIMPLE_TYPE(Neorv32SysInfoState, NEORV32_SYSINFO_QEMU)
 
 struct Neorv32SysInfoState{
     SysBusDevice parent_obj;
-    qemu_irq irq;
     MemoryRegion mmio;
     uint32_t clk_hz;
     uint32_t mem_val;
