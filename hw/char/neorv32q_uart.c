@@ -92,16 +92,34 @@ static void neorv32_uart_update_irq(Neorv32UARTState *s)
 static uint64_t
 neorv32_uart_read(void *opaque, hwaddr addr, unsigned int size)
 {
+	Neorv32UARTState *s = opaque;
+    unsigned char r;
 
-    return 17;
-//	Neorv32UARTState *s = opaque;
-//    unsigned char r;
-//
-//
-//
-//    qemu_log_mask(LOG_GUEST_ERROR, "%s: bad read: addr=0x%x\n",
-//                  __func__, (int)addr);
-//    return 0;
+    switch (addr) {
+        case NEORV32_UART_CTRL:
+        	if (s->rx_fifo_len) {
+        		s->CTRL |= (1<<UART_CTRL_RX_NEMPTY); //set data available
+        	} else {
+        		s->CTRL &= ~(1<<UART_CTRL_RX_NEMPTY); //clear data available
+        	}
+            return s->CTRL;
+        case NEORV32_UART_DATA:
+        	if (s->rx_fifo_len) {
+				r = s->rx_fifo[0];
+				memmove(s->rx_fifo, s->rx_fifo + 1, s->rx_fifo_len - 1);
+				s->rx_fifo_len--;
+				qemu_chr_fe_accept_input(&s->chr);
+				s->DATA = r; //not sure need to store it
+				neorv32_uart_update_irq(s); //TODO: check if need to call
+				return r;
+        	}
+        }
+
+
+
+    qemu_log_mask(LOG_GUEST_ERROR, "%s: bad read: addr=0x%x\n",
+                  __func__, (int)addr);
+    return 0;
 }
 
 
