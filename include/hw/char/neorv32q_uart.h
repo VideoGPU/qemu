@@ -24,6 +24,8 @@ enum {
 	NEORV32_UART_IP_RXWM       = 2  /* Receive watermark interrupt pending */
 };
 
+
+
 struct Neorv32UARTState {
     /*< private >*/
     SysBusDevice parent_obj;
@@ -35,6 +37,8 @@ struct Neorv32UARTState {
     uint8_t rx_fifo[NEORV32_UART_RX_FIFO_SIZE];
     uint8_t rx_fifo_len;
     uint32_t ie; //interrupt enable
+    uint32_t CTRL;
+    uint32_t DATA;
 };
 
 Neorv32UARTState *neorv32_uart_create(MemoryRegion *address_space, hwaddr base,
