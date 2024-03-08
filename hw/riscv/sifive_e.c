@@ -122,8 +122,14 @@ static void sifive_e_machine_init(MachineState *machine)
     for (i = 0; i < sizeof(reset_vec) >> 2; i++) {
         reset_vec[i] = cpu_to_le32(reset_vec[i]);
     }
-    rom_add_blob_fixed_as("mrom.reset", reset_vec, sizeof(reset_vec),
-                          memmap[SIFIVE_E_DEV_MROM].base, &address_space_memory);
+//    rom_add_blob_fixed_as("mrom.reset", reset_vec, sizeof(reset_vec),
+//                          memmap[SIFIVE_E_DEV_MROM].base, &address_space_memory);
+
+    //Neorv32 bios
+    if (machine->firmware) {
+		riscv_find_and_load_firmware(machine, machine->firmware,
+				memmap[SIFIVE_E_DEV_MROM].base, NULL);
+    }
 
     if (machine->kernel_filename) {
         riscv_load_kernel(machine, &s->soc.cpus,
@@ -194,7 +200,8 @@ static void sifive_e_soc_init(Object *obj)
     object_initialize_child(obj, "cpus", &s->cpus, TYPE_RISCV_HART_ARRAY);
     object_property_set_int(OBJECT(&s->cpus), "num-harts", ms->smp.cpus,
                             &error_abort);
-    object_property_set_int(OBJECT(&s->cpus), "resetvec", 0x1004, &error_abort);
+    //object_property_set_int(OBJECT(&s->cpus), "resetvec", 0x1004, &error_abort); //Origin
+    object_property_set_int(OBJECT(&s->cpus), "resetvec", 0xFFFFC000, &error_abort); //Neorv32 Start address
     object_initialize_child(obj, "riscv.sifive.e.gpio0", &s->gpio,
                             TYPE_SIFIVE_GPIO);
     object_initialize_child(obj, "riscv.sifive.e.aon", &s->aon,
