@@ -10,14 +10,15 @@
 #include "hw/qdev-properties-system.h"
 #include "neorv32_sysinfo.h" //QEMU related
 
+//TODO: do something with this relative path
 #include "/mnt/shonot/fpga_projects/neorv32/sw/lib/include/neorv32_sysinfo.h" //Neorv32 source tree
 
 //Register addresses
 enum {
-	REG_SYSINFO_CLK        = 0,
-	REG_SYSINFO_MEM        = 4,
-	REG_SYSINFO_SOC        = 8,
-	REG_SYSINFO_CACHE      = 12,
+    REG_SYSINFO_CLK        = 0,
+    REG_SYSINFO_MEM        = 4,
+    REG_SYSINFO_SOC        = 8,
+    REG_SYSINFO_CACHE      = 12,
 };
 
 /* Registers values */
@@ -25,39 +26,6 @@ enum {
 #define SYSINFO_MEM_VAL            0x0F0F0F0F //Set all to 32KBytes 0xF = 15 = log2(32*1024)
 #define SYSINFO_SOC_VAL            (1 << SYSINFO_SOC_IO_UART0) //Only UART enabled
 #define SYSINFO_CACHE_VAL          (0) //No cache
-
-
-/* Returns the state of the IP (interrupt pending) register */
-//static uint64_t neorv32_sysinfo_ip(Neorv32SysInfoState *s)
-//{
-//    uint64_t ret = 0;
-//
-//    uint64_t txcnt = SIFIVE_UART_GET_TXCNT(s->txctrl);
-//    uint64_t rxcnt = SIFIVE_UART_GET_RXCNT(s->rxctrl);
-//
-//    if (txcnt != 0) {
-//        ret |= SIFIVE_UART_IP_TXWM;
-//    }
-//    if (s->rx_fifo_len > rxcnt) {
-//        ret |= SIFIVE_UART_IP_RXWM;
-//    }
-//
-//    return ret;
-//}
-
-//static void neorv32_sysinfo_update_irq(Neorv32SysInfoState *s)
-//{
-////    int cond = 0;
-////    if ((s->ie & SIFIVE_UART_IE_TXWM) ||
-////        ((s->ie & SIFIVE_UART_IE_RXWM) && s->rx_fifo_len)) {
-////        cond = 1;
-////    }
-////    if (cond) {
-////        qemu_irq_raise(s->irq);
-////    } else {
-////        qemu_irq_lower(s->irq);
-////    }
-//}
 
 
 static uint64_t
@@ -105,6 +73,7 @@ neorv32_sysinfo_write(void *opaque, hwaddr addr,
                   __func__, (int)addr, (int)value);
 }
 
+
 static const MemoryRegionOps neorv32_sysinfo_ops = {
     .read = neorv32_sysinfo_read,
     .write = neorv32_sysinfo_write,
@@ -115,25 +84,6 @@ static const MemoryRegionOps neorv32_sysinfo_ops = {
     }
 };
 
-//static void neorv32_sysinfo_rx(void *opaque, const uint8_t *buf, int size)
-//{
-//    Neorv32SysInfoState *s = opaque;
-////
-////    /* Got a byte.  */
-////    if (s->rx_fifo_len >= sizeof(s->rx_fifo)) {
-////        printf("WARNING: UART dropped char.\n");
-////        return;
-////    }
-////    s->rx_fifo[s->rx_fifo_len++] = *buf;
-////
-////    neorv32_sysinfo_update_irq(s);
-//}
-
-
-//static Property neorv32_sysinfo_properties[] = {
-//    DEFINE_PROP_CHR("chardev", Neorv32SysInfoState, chr),
-//    DEFINE_PROP_END_OF_LIST(),
-//};
 
 static void neorv32_sysinfo_init(Object *obj)
 {
@@ -143,17 +93,11 @@ static void neorv32_sysinfo_init(Object *obj)
     memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_sysinfo_ops, s,
                           TYPE_SIFIVE_UART, SIFIVE_UART_MAX);
     sysbus_init_mmio(sbd, &s->mmio);
-   // sysbus_init_irq(sbd, &s->irq);
 }
 
 static void neorv32_sysinfo_realize(DeviceState *dev, Error **errp)
 {
- //   Neorv32SysInfoState *s = NEORV32_SYSINFO_QEMU(dev);
-
-//    qemu_chr_fe_set_handlers(&s->chr, neorv32_sysinfo_can_rx, neorv32_sysinfo_rx,
-//                             neorv32_sysinfo_event, neorv32_sysinfo_be_change, s,
-//                             NULL, true);
-
+    return;
 }
 
 static void neorv32_sysinfo_reset_enter(Object *obj, ResetType type)
@@ -168,8 +112,7 @@ static void neorv32_sysinfo_reset_enter(Object *obj, ResetType type)
 
 static void neorv32_sysinfo_reset_hold(Object *obj, ResetType type)
 {
-//    Neorv32SysInfoState *s = NEORV32_SYSINFO_QEMU(obj);
-//    qemu_irq_lower(s->irq);
+    return;
 }
 
 static const VMStateDescription vmstate_neorv32_sysinfo = {
@@ -195,7 +138,6 @@ static void neorv32_sysinfo_class_init(ObjectClass *oc, void *data)
     dc->vmsd = &vmstate_neorv32_sysinfo;
     rc->phases.enter = neorv32_sysinfo_reset_enter;
     rc->phases.hold  = neorv32_sysinfo_reset_hold;
-    //device_class_set_props(dc, neorv32_sysinfo_properties);
     set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 }
 
