@@ -158,6 +158,7 @@ struct RISCVCPUConfig {
     bool ext_xtheadmempair;
     bool ext_xtheadsync;
     bool ext_XVentanaCondOps;
+    bool ext_xneorv32xisa;
 
     uint32_t pmu_mask;
     uint16_t vlenb;
