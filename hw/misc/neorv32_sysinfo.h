@@ -4,8 +4,8 @@
 #include "exec/memory.h"
 
 /* Internal memory sizes */
-#define SYSINFO_IMEM_SIZE 0x4000 /* 16K IMEM */
-#define SYSINFO_DMEM_SIZE 0x4000 /* 16K DMEM */
+#define SYSINFO_IMEM_SIZE 0x8000 /* 32K IMEM */
+#define SYSINFO_DMEM_SIZE 0x8000 /* 32K DMEM */
 #define SYSINFO_RVSG_SIZE 0x0    /* Not implemented*/
 
 /* Define register values */
