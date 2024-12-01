@@ -686,6 +686,7 @@ static void rv32_sifive_e_cpu_init(Object *obj)
     cpu->cfg.pmp = true;
 }
 
+
 static void rv32_neorv32_cpu_init(Object *obj)
 {
     CPURISCVState *env = &RISCV_CPU(obj)->env;
@@ -701,6 +702,11 @@ static void rv32_neorv32_cpu_init(Object *obj)
     cpu->cfg.ext_zifencei = true;
     cpu->cfg.ext_zicsr = true;
     cpu->cfg.pmp = true;
+
+#ifndef CONFIG_USER_ONLY
+    cpu->cfg.ext_xneorv32xisa = true;
+    neorv32_register_xisa_csr(cpu);
+#endif
 }
 
 static void rv32_ibex_cpu_init(Object *obj)

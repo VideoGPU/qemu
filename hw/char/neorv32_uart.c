@@ -109,7 +109,8 @@ neorv32_uart_read(void *opaque, hwaddr addr, unsigned int size)
                 memmove(s->rx_fifo, s->rx_fifo + 1, s->rx_fifo_len - 1);
                 s->rx_fifo_len--;
                 qemu_chr_fe_accept_input(&s->chr);
-                s->DATA = r; /* not sure need to store it */
+                s->DATA = r;
+
                 neorv32_uart_update_irq(s); /* TODO: check if need to call */
                 return r;
             }

@@ -33,6 +33,7 @@ typedef struct Neorv32SoCState {
     RISCVHartArrayState cpus;
     DeviceState *plic;
     MemoryRegion xip_mem;
+    MemoryRegion imem_region;
     MemoryRegion bootloader_rom;
 } Neorv32SoCState;
 

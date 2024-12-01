@@ -74,6 +74,11 @@ static void neorv32_machine_init(MachineState *machine)
     memory_region_add_subregion(sys_mem,
         memmap[NEORV32_DMEM].base, machine->ram);
 
+    /* Instruction Memory (IMEM) */
+	memory_region_init_ram(&s->soc.imem_region, OBJECT(&s->soc), "riscv.neorv32.imem",
+						 memmap[NEORV32_IMEM].size, &error_fatal);
+	memory_region_add_subregion(sys_mem, memmap[NEORV32_IMEM].base, &s->soc.imem_region);
+
     /* Mask ROM reset vector */
     uint32_t reset_vec[4];
 
@@ -86,12 +91,13 @@ static void neorv32_machine_init(MachineState *machine)
         reset_vec[i] = cpu_to_le32(reset_vec[i]);
     }
 
-    /* Neorv32 bios */
+    /* Neorv32 bootloader */
     if (machine->firmware) {
         riscv_find_and_load_firmware(machine, machine->firmware,
                                      memmap[NEORV32_BOOTLOADER_ROM].base, NULL);
     }
 
+    /* Neorv32 example applications */
     if (machine->kernel_filename) {
         riscv_load_kernel(machine, &s->soc.cpus,
                           memmap[NEORV32_IMEM].base,
