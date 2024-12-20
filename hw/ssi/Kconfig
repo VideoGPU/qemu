@@ -28,3 +28,6 @@ config BCM2835_SPI
 config PNV_SPI
     bool
     select SSI
+config NEORV32_SPI
+    bool
+    select SSI

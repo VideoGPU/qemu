@@ -9,9 +9,8 @@
 #define SYSINFO_RVSG_SIZE 0x0    /* Not implemented*/
 
 /* Define register values */
-#define SYSINFO_CLK_HZ      (100000000U) // 100 MHz
-#define SYSINFO_SOC_VAL     (1U << SYSINFO_SOC_IO_UART0) // Only UART enabled
-#define SYSINFO_CACHE_VAL   (0U) // No cache
+#define SYSINFO_CLK_HZ      (100000000U) /* 100 MHz */
+#define SYSINFO_CACHE_VAL   (0U) /* No cache */
 
 /**********************************************************************//**
  * @name Main Address Space Sections

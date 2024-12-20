@@ -5,6 +5,14 @@
 #include "neorv32_sysinfo.h" /* QEMU related */
 #include "neorv32_sysinfo_rtl.h" /* RTL related */
 
+#define SYSINFO_SOC_ENABLE(x) (1U << (x))
+// Enable UART and SPI
+#define SYSINFO_SOC_VAL \
+			(SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_UART0) | \
+			 SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_SPI))
+
+
+
 
 /* Register addresses (offsets) */
 enum {

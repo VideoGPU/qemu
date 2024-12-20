@@ -35,19 +35,22 @@
 #include "hw/intc/riscv_aclint.h"
 #include "chardev/char.h"
 #include "sysemu/sysemu.h"
+#include "hw/ssi/ssi.h"    /* For ssi_realize_and_unref() */
 
 #include "hw/riscv/neorv32.h"
 #include "hw/misc/neorv32_sysinfo.h"
 #include "hw/char/neorv32_uart.h"
+#include "hw/ssi/neorv32_spi.h"
 
 static const MemMapEntry neorv32_memmap[] = {
 
     [NEORV32_IMEM]           = { NEORV32_IMEM_BASE,               SYSINFO_IMEM_SIZE},
-    [NEORV32_BOOTLOADER_ROM] = { NEORV32_BOOTLOADER_BASE_ADDRESS, 0x2000},     //8K  ROM for bootloader
-    [NEORV32_XIP]            = { NEORV32_XIP_MEM_BASE_ADDRESS,    0x10000000}, //256 MBytes flash
+    [NEORV32_BOOTLOADER_ROM] = { NEORV32_BOOTLOADER_BASE_ADDRESS, 0x2000},     /* 8K  ROM for bootloader */
+    [NEORV32_XIP]            = { NEORV32_XIP_MEM_BASE_ADDRESS,    0x10000000}, /* 256 MBytes flash */
     [NEORV32_DMEM]           = { NEORV32_DMEM_BASE,               SYSINFO_DMEM_SIZE},
     [NEORV32_SYSINFO]        = { NEORV32_SYSINFO_BASE,            0x100},
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,              0x100},
+	[NEORV32_SPI]            = { NEORV32_SPI_BASE,                0x100},
 };
 
 static void neorv32_machine_init(MachineState *machine)
@@ -171,25 +174,87 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         memmap[NEORV32_BOOTLOADER_ROM].base, &s->bootloader_rom);
 
 
-    //Sysinfo ROM
+    /* Sysinfo ROM */
     neorv32_sysinfo_create(sys_mem, memmap[NEORV32_SYSINFO].base);
 
-    //Uart0
+    /* Uart0 */
     neorv32_uart_create(sys_mem, memmap[NEORV32_UART0].base,serial_hd(0));
 
-    /* Flash memory */
-    memory_region_init_rom(&s->xip_mem, OBJECT(dev), "riscv.neorv32.xip",
+    /* XIP memory, can be pre-loaded with:
+    * -device loader,file=/home/data.raw,addr=0x10000000
+    */
+        memory_region_init_rom(&s->xip_mem, OBJECT(dev), "riscv.neorv32.xip",
                            memmap[NEORV32_XIP].size, &error_fatal);
     memory_region_add_subregion(sys_mem, memmap[NEORV32_XIP].base,
         &s->xip_mem);
+
+    /* SPI controller */
+	NEORV32SPIState *spi = neorv32_spi_create(sys_mem, memmap[NEORV32_SPI].base);
+
+	if (!spi) {
+		error_setg(errp, "SPI is not created");
+		return;
+	}
+
+
+    /* Expose SPI Bus */
+//	BusState *spi_bus;
+//    gchar *bus_name = g_strdup_printf("spi0");
+//
+//    spi_bus = qdev_get_child_bus(DEVICE(s), bus_name);
+//    g_free(bus_name);
+//
+//    if (!spi_bus) {
+//        error_setg(errp, "SPI bus not initialized");
+//        return;
+//    }
+//
+//    /* Set the SPI bus as a named bus to allow devices to attach via command line */
+//    qdev_prop_set_string(OBJECT(spi_bus), "name", "spi_bus");
+//    if (*errp) {
+//    	error_report("Error 2");
+//        return;
+//    }
+
+	/* Connect a built-in SPI flash device (m25p80) to the SPI bus *
+	 *  Can be pre-loaded with:
+     *  -drive file=/home/flash_contents.bin,if=mtd,format=raw,id=flash -device m25p80,drive=flash
+     */
+
+
+	//DeviceState *flash_dev = qdev_new("m25p80");
+
+	//DeviceState *qdev_find_recursive(BusState *bus,"m25p80");
+//	BusState * spi_bus = (BusState *)qdev_get_parent_bus(dev);
+//	//DeviceState *flash_dev = DEVICE(qdev_find_recursive(sysbus_get_default(),"m25p80"));
+//	DeviceState *flash_dev = DEVICE(qdev_find_recursive(spi_bus,"m25p80"));
+
+
+//	if (spi_bus) {
+//		error_report("No SPI bus found. "
+//				"Please provide '-device neorv32.spi' on the command line.");
+//		exit(1);
+//	}
+//
+//
+//
+//	/* If needed, set properties such as 'cs' here, if not already set on command line */
+//	/* qdev_prop_set_uint32(flash_dev, "cs", 0); */
+//
+//	if (!flash_dev) {
+//	    error_report("No external flash device found. "
+//	                 "Please provide '-device m25p80,drive=flash' on the command line.");
+//	    exit(1);
+//	}
+//
+//	/* Realize and attach the flash to the SPI bus */
+//	ssi_realize_and_unref(flash_dev, spi->bus, &error_fatal);
 }
 
 static void neorv32_soc_class_init(ObjectClass *oc, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
-
     dc->realize = neorv32_soc_realize;
-    /* Reason: Uses serial_hds in realize function, thus can't be used twice */
     dc->user_creatable = false;
 }
 
