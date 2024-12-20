@@ -134,4 +134,5 @@ config NEORV32
     default y
     depends on RISCV32
     select NEORV32_UART
+    select NEORV32_SPI
     select NEORV32_SYSINFO_QEMU
