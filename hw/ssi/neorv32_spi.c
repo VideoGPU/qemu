@@ -1,4 +1,26 @@
 /*
+ * QEMU implementation of the Neorv32 SPI block.
+ *
+ * Copyright (c) 2024 Michael Levit.
+ *
+ * Author:
+ *   Michael Levit <michael@videogpu.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2 or later, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+/*
  * QEMU model of a NEORV32 SPI Controller
  *
  * This example is inspired by the SiFive SPI controller implementation shown
@@ -75,7 +97,7 @@ enum NEORV32_SPI_CTRL_enum {
 /* Register offsets */
 #define NEORV32_SPI_CTRL  0x00
 #define NEORV32_SPI_DATA  0x04
-#define NEORV32_SPI_SIZE  0x1000
+#define NEORV32_SPI_MMIO_SIZE   0x8  // ctrl + data (8 bytes total)
 
 /* Utility functions to get/set bits in ctrl register */
 static inline bool get_ctrl_bit(NEORV32SPIState *s, int bit)
@@ -141,6 +163,9 @@ static void neorv32_spi_update_cs(NEORV32SPIState *s)
         if (cs_index < s->num_cs && cs_active) {
             qemu_set_irq(s->cs_lines[cs_index], 0); // active (low)
         }
+
+//        flash_cs = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
+//        sysbus_connect_irq(SYS_BUS_DEVICE(&s->soc.spi0), 1, flash_cs);
     }
 }
 
@@ -183,7 +208,7 @@ static void neorv32_spi_flush_txfifo(NEORV32SPIState *s)
 
     while (!fifo8_is_empty(&s->tx_fifo)) {
         uint8_t tx = fifo8_pop(&s->tx_fifo);
-        uint8_t rx = ssi_transfer(s->spi, tx);
+        uint8_t rx = ssi_transfer(s->bus, tx);
 
         /* Push received byte into RX FIFO if not full */
         if (!fifo8_is_full(&s->rx_fifo)) {
@@ -198,7 +223,7 @@ static void neorv32_spi_reset(DeviceState *d)
     NEORV32SPIState *s = NEORV32_SPI(d);
 
     s->ctrl = 0;
-    s->data_reg = 0;
+    s->data = 0;
 
     /* Reset FIFOs */
     fifo8_reset(&s->tx_fifo);
@@ -253,6 +278,7 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
 
     switch (addr) {
     case NEORV32_SPI_CTRL: {
+
         /* Writing control register:
          * Some bits are read-only (e.g., status bits).
          * We should mask them out or ignore writes to them.
@@ -283,9 +309,29 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
     }
 
     case NEORV32_SPI_DATA:
+		{
+			//Debug
+			volatile int a = 0;
+			if (value == 0x4) {
+				a += 1;
+			}else if (value == 0x6) {
+				a += 2;
+			}
+		}
         /* Writing DATA puts a byte into TX FIFO if not full */
         if (!fifo8_is_full(&s->tx_fifo)) {
             uint8_t tx_byte = (uint8_t)value;
+
+            /* Intercept the 0xAB opcode. */
+             if (tx_byte == 0xAB) {
+                 /* Option A: Replace it with a harmless NOP (e.g. 0x00 or 0xFF). */
+                 tx_byte = 0x00;
+
+                 /* Option B: Drop it entirely (don’t push to FIFO).
+                    But that might break protocol timing from the guest’s perspective,
+                    so usually better to push something valid, just not 0xAB. */
+             }
+
             fifo8_push(&s->tx_fifo, tx_byte);
             /* After pushing data, flush TX to SPI bus */
             neorv32_spi_flush_txfifo(s);
@@ -315,30 +361,44 @@ static const MemoryRegionOps neorv32_spi_ops = {
     },
 };
 
+static void neorv32_spi_init(Object *obj)
+{
+    NEORV32SPIState *s = NEORV32_SPI(obj);
+    s->ctrl = 0;
+    s->data = 0;
+    s->fifo_capacity = 8; /* FIFO capacity of 8 bytes */
+//s->last_rx = 0xFF;
+    //s->cs_index = 0; /* Use CS0 by default */
+    s->num_cs = 1; /* Default to 1 CS line */
+}
+
 /* Realize the device */
 static void neorv32_spi_realize(DeviceState *dev, Error **errp)
 {
     NEORV32SPIState *s = NEORV32_SPI(dev);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
 
-    s->spi = ssi_create_bus(dev, "spi");
+    /* Create SSI bus */
+    s->bus = ssi_create_bus(dev, "neorv32-spi-bus");
+
+    /* Initialize MMIO */
+    memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_spi_ops, s,
+                          TYPE_NEORV32_SPI, NEORV32_SPI_MMIO_SIZE);
+    sysbus_init_mmio(sbd, &s->mmio);
 
     /* Initialize interrupt line */
     sysbus_init_irq(sbd, &s->irq);
 
-    /* Let's assume we have up to 3 CS lines. This could be configurable. */
-    s->num_cs = 3;
+    /* s->num_cs is assigned at neorv32_spi_properties */
     s->cs_lines = g_new0(qemu_irq, s->num_cs);
     for (int i = 0; i < s->num_cs; i++) {
         sysbus_init_irq(sbd, &s->cs_lines[i]);
+        /* Initially set CS high (inactive) */
+        qemu_set_irq(s->cs_lines[i], 1);
     }
 
-    memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_spi_ops, s,
-                          TYPE_NEORV32_SPI, NEORV32_SPI_SIZE);
-    sysbus_init_mmio(sbd, &s->mmio);
 
     /* Initialize FIFOs */
-    s->fifo_capacity = 8; /* Assume an 8-byte FIFO, adjust as needed */
     fifo8_create(&s->tx_fifo, s->fifo_capacity);
     fifo8_create(&s->rx_fifo, s->fifo_capacity);
 
@@ -359,6 +419,7 @@ static void neorv32_spi_realize(DeviceState *dev, Error **errp)
 
 /* Device properties can be added if needed. For now, none. */
 static Property neorv32_spi_properties[] = {
+	DEFINE_PROP_UINT32("num-cs", NEORV32SPIState, num_cs, 1),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -371,16 +432,17 @@ static void neorv32_spi_class_init(ObjectClass *klass, void *data)
     dc->realize = neorv32_spi_realize;
 }
 
-static const TypeInfo neorv32_spi_info = {
+static const TypeInfo neorv32_spi_type_info = {
     .name           = TYPE_NEORV32_SPI,
     .parent         = TYPE_SYS_BUS_DEVICE,
     .instance_size  = sizeof(NEORV32SPIState),
+    .instance_init  = neorv32_spi_init,
     .class_init     = neorv32_spi_class_init,
 };
 
 static void neorv32_spi_register_types(void)
 {
-    type_register_static(&neorv32_spi_info);
+    type_register_static(&neorv32_spi_type_info);
 }
 
 type_init(neorv32_spi_register_types)
@@ -391,14 +453,23 @@ NEORV32SPIState *neorv32_spi_create(MemoryRegion *sys_mem, hwaddr base_addr)
     object_initialize(&s->parent_obj, sizeof(*s), TYPE_NEORV32_SPI);
     SysBusDevice *d = SYS_BUS_DEVICE(&s->parent_obj);
 
-    /* If needed, set the number of chip selects before realize */
-    qdev_prop_set_uint32(DEVICE(d), "num-cs", 3);
-
     /* Realize the device (this calls the realize function defined in neorv32_spi.c) */
     sysbus_realize_and_unref(d, &error_fatal);
 
     /* Map the device's MMIO region into the system address space */
     memory_region_add_subregion(sys_mem, base_addr, &s->mmio);
+
+
+    //-------------NOT WORKS!!!!!!
+//    DeviceState *flash_dev = DEVICE(&d->parent_obj);
+//    if (flash_dev) {
+//        //qemu_irq flash_cs = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
+//        //sysbus_connect_irq(d, 1, flash_cs);
+//		sysbus_connect_irq(d, 1, s->cs_lines[0]);
+//    } else {
+//    	error_report("Failed to find flash device with id=flash");
+//    }
+    //-------------END OF NOT WORKS!!!!!!
 
     return s;
 }
