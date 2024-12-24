@@ -38,11 +38,11 @@ typedef struct  NEORV32SPIState {
     qemu_irq irq;
 
     /* SPI bus (master) */
-    SSIBus *spi;
+    SSIBus *bus;
 
     /* Chip selects (assume up to 3 CS lines) */
     qemu_irq *cs_lines;
-    int num_cs;
+    uint32_t num_cs;
 
     /* Registers:
      * Assume:
@@ -50,7 +50,7 @@ typedef struct  NEORV32SPIState {
      * 0x04: DATA (r/w)
      */
     uint32_t ctrl;
-    uint32_t data_reg;
+    uint32_t data;
 
     /* FIFOs */
     Fifo8 tx_fifo;

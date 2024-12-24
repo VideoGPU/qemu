@@ -50,7 +50,7 @@ static const MemMapEntry neorv32_memmap[] = {
     [NEORV32_DMEM]           = { NEORV32_DMEM_BASE,               SYSINFO_DMEM_SIZE},
     [NEORV32_SYSINFO]        = { NEORV32_SYSINFO_BASE,            0x100},
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,              0x100},
-	[NEORV32_SPI]            = { NEORV32_SPI_BASE,                0x100},
+	[NEORV32_SPI0]           = { NEORV32_SPI_BASE,                0x100},
 };
 
 static void neorv32_machine_init(MachineState *machine)
@@ -189,12 +189,14 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         &s->xip_mem);
 
     /* SPI controller */
-	NEORV32SPIState *spi = neorv32_spi_create(sys_mem, memmap[NEORV32_SPI].base);
+	NEORV32SPIState *spi = neorv32_spi_create(sys_mem, memmap[NEORV32_SPI0].base);
 
 	if (!spi) {
 		error_setg(errp, "SPI is not created");
 		return;
 	}
+
+
 
 
     /* Expose SPI Bus */
