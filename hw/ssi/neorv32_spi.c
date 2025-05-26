@@ -59,6 +59,7 @@
 #include "qapi/error.h"
 #include "hw/irq.h"
 #include "hw/ssi/neorv32_spi.h"
+#include "sysemu/blockdev.h"
 
 
 
@@ -322,16 +323,6 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
         if (!fifo8_is_full(&s->tx_fifo)) {
             uint8_t tx_byte = (uint8_t)value;
 
-            /* Intercept the 0xAB opcode. */
-             if (tx_byte == 0xAB) {
-                 /* Option A: Replace it with a harmless NOP (e.g. 0x00 or 0xFF). */
-                 tx_byte = 0x00;
-
-                 /* Option B: Drop it entirely (don’t push to FIFO).
-                    But that might break protocol timing from the guest’s perspective,
-                    so usually better to push something valid, just not 0xAB. */
-             }
-
             fifo8_push(&s->tx_fifo, tx_byte);
             /* After pushing data, flush TX to SPI bus */
             neorv32_spi_flush_txfifo(s);
@@ -367,7 +358,7 @@ static void neorv32_spi_init(Object *obj)
     s->ctrl = 0;
     s->data = 0;
     s->fifo_capacity = 8; /* FIFO capacity of 8 bytes */
-//s->last_rx = 0xFF;
+    //s->last_rx = 0xFF;
     //s->cs_index = 0; /* Use CS0 by default */
     s->num_cs = 1; /* Default to 1 CS line */
 }
@@ -378,24 +369,21 @@ static void neorv32_spi_realize(DeviceState *dev, Error **errp)
     NEORV32SPIState *s = NEORV32_SPI(dev);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
 
-    /* Create SSI bus */
-    s->bus = ssi_create_bus(dev, "neorv32-spi-bus");
+    /* Create the SSI master bus */
+	s->bus = ssi_create_bus(dev, "neorv32-spi-bus");
 
-    /* Initialize MMIO */
-    memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_spi_ops, s,
-                          TYPE_NEORV32_SPI, NEORV32_SPI_MMIO_SIZE);
-    sysbus_init_mmio(sbd, &s->mmio);
+	/* 1) IRQ inputs: first the main IRQ, then each CS line */
+	sysbus_init_irq(sbd, &s->irq);
+	s->cs_lines = g_new0(qemu_irq, s->num_cs);
+	for (int i = 0; i < s->num_cs; i++) {
+		sysbus_init_irq(sbd, &s->cs_lines[i]);
+		qemu_set_irq(s->cs_lines[i], 1);  /* deassert CS (high) */
+	}
 
-    /* Initialize interrupt line */
-    sysbus_init_irq(sbd, &s->irq);
-
-    /* s->num_cs is assigned at neorv32_spi_properties */
-    s->cs_lines = g_new0(qemu_irq, s->num_cs);
-    for (int i = 0; i < s->num_cs; i++) {
-        sysbus_init_irq(sbd, &s->cs_lines[i]);
-        /* Initially set CS high (inactive) */
-        qemu_set_irq(s->cs_lines[i], 1);
-    }
+	/* 2) Now map the MMIO region */
+	memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_spi_ops, s,
+						  TYPE_NEORV32_SPI, NEORV32_SPI_MMIO_SIZE);
+	sysbus_init_mmio(sbd, &s->mmio);
 
 
     /* Initialize FIFOs */
@@ -447,29 +435,37 @@ static void neorv32_spi_register_types(void)
 
 type_init(neorv32_spi_register_types)
 
+
+
 NEORV32SPIState *neorv32_spi_create(MemoryRegion *sys_mem, hwaddr base_addr)
 {
+    /* Allocate and initialize the SPI state object */
     NEORV32SPIState *s = g_new0(NEORV32SPIState, 1);
     object_initialize(&s->parent_obj, sizeof(*s), TYPE_NEORV32_SPI);
-    SysBusDevice *d = SYS_BUS_DEVICE(&s->parent_obj);
+    SysBusDevice *sbd = SYS_BUS_DEVICE(&s->parent_obj);
 
-    /* Realize the device (this calls the realize function defined in neorv32_spi.c) */
-    sysbus_realize_and_unref(d, &error_fatal);
+    /* Realize the SPI controller (sets up mmio, irq, SSI bus, cs_lines) */
+    sysbus_realize_and_unref(sbd, &error_fatal);
 
-    /* Map the device's MMIO region into the system address space */
-    memory_region_add_subregion(sys_mem, base_addr, &s->mmio);
+    /* Map the MMIO region into the system address space */
+    sysbus_mmio_map(sbd, 0, base_addr);
 
+    /* Attach an SPI flash to SPI0 if a drive image is provided */
+    DriveInfo *dinfo = drive_get(IF_MTD, 0, 0);
+    if (dinfo) {
+        /* Create the flash device and bind the MTD backend */
+        DeviceState *flash = qdev_new("n25q512a11");
+        qdev_prop_set_drive_err(flash, "drive",
+                                blk_by_legacy_dinfo(dinfo),
+                                &error_fatal);
 
-    //-------------NOT WORKS!!!!!!
-//    DeviceState *flash_dev = DEVICE(&d->parent_obj);
-//    if (flash_dev) {
-//        //qemu_irq flash_cs = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
-//        //sysbus_connect_irq(d, 1, flash_cs);
-//		sysbus_connect_irq(d, 1, s->cs_lines[0]);
-//    } else {
-//    	error_report("Failed to find flash device with id=flash");
-//    }
-    //-------------END OF NOT WORKS!!!!!!
+        /* Realize flash on the same SSI bus created during controller realize */
+        qdev_realize_and_unref(flash, BUS(s->bus), &error_fatal);
+
+        /* Retrieve and wire the flash's CS input line to CS0 output */
+        qemu_irq flash_cs = qdev_get_gpio_in_named(flash, SSI_GPIO_CS, 0);
+        sysbus_connect_irq(sbd, 1, flash_cs);
+    }
 
     return s;
 }
