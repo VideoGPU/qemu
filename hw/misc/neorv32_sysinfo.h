@@ -1,7 +1,7 @@
 #ifndef HW_NEORV32_SYSINFO_H
 #define HW_NEORV32_SYSINFO_H
 
-#include "exec/memory.h"
+#include "system/memory.h"
 
 /* Internal memory sizes */
 #define SYSINFO_IMEM_SIZE 0x8000 /* 32K IMEM */

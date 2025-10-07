@@ -18,7 +18,6 @@ typedef volatile struct __attribute__((packed,aligned(4))) {
 
 static Property neorv32_uart_properties[] = {
     DEFINE_PROP_CHR("chardev", Neorv32UARTState, chr),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 enum {
@@ -247,7 +246,7 @@ static void neorv32_uart_reset_hold(Object *obj, ResetType type)
     qemu_irq_lower(s->irq);
 }
 
-static void neorv32_uart_class_init(ObjectClass *oc, void *data)
+static void neorv32_uart_class_init(ObjectClass *oc,const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
     ResettableClass *rc = RESETTABLE_CLASS(oc);

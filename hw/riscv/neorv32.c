@@ -34,7 +34,7 @@
 #include "hw/riscv/boot.h"
 #include "hw/intc/riscv_aclint.h"
 #include "chardev/char.h"
-#include "sysemu/sysemu.h"
+#include "system/system.h"
 #include "hw/ssi/ssi.h"    /* For ssi_realize_and_unref() */
 
 #include "hw/riscv/neorv32.h"
@@ -61,6 +61,8 @@ static void neorv32_machine_init(MachineState *machine)
     Neorv32State *s = NEORV32_MACHINE(machine);
     MemoryRegion *sys_mem = get_system_memory();
     int i;
+    RISCVBootInfo boot_info;
+    hwaddr start_addr = memmap[NEORV32_BOOTLOADER_ROM].base;
 
     if (machine->ram_size != mc->default_ram_size) {
         char *sz = size_to_str(mc->default_ram_size);
@@ -97,12 +99,13 @@ static void neorv32_machine_init(MachineState *machine)
     /* Neorv32 bootloader */
     if (machine->firmware) {
         riscv_find_and_load_firmware(machine, machine->firmware,
-                                     memmap[NEORV32_BOOTLOADER_ROM].base, NULL);
+        		                     &start_addr, NULL);
     }
 
     /* Neorv32 example applications */
+    riscv_boot_info_init(&boot_info, &s->soc.cpus);
     if (machine->kernel_filename) {
-        riscv_load_kernel(machine, &s->soc.cpus,
+        riscv_load_kernel(machine, &boot_info,
                           memmap[NEORV32_IMEM].base,
                           false, NULL);
     }
@@ -115,7 +118,7 @@ static void neorv32_machine_instance_init(Object *obj)
     /* Neorv32State *s = NEORV32_MACHINE(obj); */
 }
 
-static void neorv32_machine_class_init(ObjectClass *oc, void *data)
+static void neorv32_machine_class_init(ObjectClass *oc,const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
 
@@ -253,7 +256,7 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
 //	ssi_realize_and_unref(flash_dev, spi->bus, &error_fatal);
 }
 
-static void neorv32_soc_class_init(ObjectClass *oc, void *data)
+static void neorv32_soc_class_init(ObjectClass *oc,const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
     dc->realize = neorv32_soc_realize;

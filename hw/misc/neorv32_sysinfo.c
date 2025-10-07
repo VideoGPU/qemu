@@ -1,7 +1,7 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
-#include "exec/address-spaces.h"
+#include "system/address-spaces.h"
 #include "neorv32_sysinfo.h" /* QEMU related */
 #include "neorv32_sysinfo_rtl.h" /* RTL related */
 

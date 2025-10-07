@@ -59,7 +59,7 @@
 #include "qapi/error.h"
 #include "hw/irq.h"
 #include "hw/ssi/neorv32_spi.h"
-#include "sysemu/blockdev.h"
+#include "system/blockdev.h"
 
 
 
@@ -408,15 +408,14 @@ static void neorv32_spi_realize(DeviceState *dev, Error **errp)
 /* Device properties can be added if needed. For now, none. */
 static Property neorv32_spi_properties[] = {
 	DEFINE_PROP_UINT32("num-cs", NEORV32SPIState, num_cs, 1),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void neorv32_spi_class_init(ObjectClass *klass, void *data)
+static void neorv32_spi_class_init(ObjectClass *klass,const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
     device_class_set_props(dc, neorv32_spi_properties);
-    dc->reset = neorv32_spi_reset;
+    device_class_set_legacy_reset(dc, neorv32_spi_reset);
     dc->realize = neorv32_spi_realize;
 }
 
