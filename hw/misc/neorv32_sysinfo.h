@@ -16,8 +16,6 @@
  * @name Main Address Space Sections
  **************************************************************************/
 /**@{*/
-/** XIP-mapped memory base address */
-#define NEORV32_XIP_MEM_BASE_ADDRESS    (0xE0000000U) //re-check
 /** bootloader memory base address */
 #define NEORV32_BOOTLOADER_BASE_ADDRESS (0xFFE00000U)
 /** peripheral/IO devices memory base address */

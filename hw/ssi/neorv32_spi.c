@@ -211,8 +211,10 @@ static void neorv32_spi_update_irq(NEORV32SPIState *s)
  */
 static void neorv32_spi_flush_txfifo(NEORV32SPIState *s)
 {
-    if (!get_ctrl_bit(s, SPI_CTRL_EN)) {
-        /* SPI not enabled, do nothing */
+    /* Must be enabled AND have a valid asserted CS, otherwise the slave ignores us */
+    if (!(get_ctrl_bit(s, SPI_CTRL_EN) &&
+          s->cs_asserted &&
+          (s->active_cs < s->num_cs))) {
         return;
     }
 
@@ -220,12 +222,12 @@ static void neorv32_spi_flush_txfifo(NEORV32SPIState *s)
         uint8_t tx = fifo8_pop(&s->tx_fifo);
         uint8_t rx = ssi_transfer(s->bus, tx);
 
-        /* Push received byte into RX FIFO if not full */
         if (!fifo8_is_full(&s->rx_fifo)) {
             fifo8_push(&s->rx_fifo, rx);
         }
     }
 }
+
 
 /* Reset the device state */
 static void neorv32_spi_reset(DeviceState *d)
@@ -420,12 +422,21 @@ static void neorv32_spi_realize(DeviceState *dev, Error **errp)
 	s->bus = ssi_create_bus(dev, "neorv32-spi-bus");
 
 	/* 1) IRQ inputs: first the main IRQ, then each CS line */
+	/* main IRQ (optional) */
 	sysbus_init_irq(sbd, &s->irq);
-	s->cs_lines = g_new0(qemu_irq, s->num_cs);
-	for (int i = 0; i < s->num_cs; i++) {
-		sysbus_init_irq(sbd, &s->cs_lines[i]);
-		qemu_set_irq(s->cs_lines[i], 1);  /* deassert CS (high) */
+
+	/* Export CS lines as *GPIO outputs* named "cs" */
+	if (s->num_cs == 0) {
+	    s->num_cs = 1;
 	}
+	s->cs_lines = g_new0(qemu_irq, s->num_cs);
+	qdev_init_gpio_out_named(DEVICE(dev), s->cs_lines, "cs", s->num_cs);
+
+	/* Deassert all CS initially (active-low) */
+	for (uint32_t i = 0; i < s->num_cs; i++) {
+	    qemu_set_irq(s->cs_lines[i], 1);
+	}
+
 
 	/* 2) Now map the MMIO region */
 	memory_region_init_io(&s->mmio, OBJECT(s), &neorv32_spi_ops, s,
@@ -485,34 +496,33 @@ type_init(neorv32_spi_register_types)
 
 NEORV32SPIState *neorv32_spi_create(MemoryRegion *sys_mem, hwaddr base_addr)
 {
-    /* Allocate and initialize the SPI state object */
-    NEORV32SPIState *s = g_new0(NEORV32SPIState, 1);
-    object_initialize(&s->parent_obj, sizeof(*s), TYPE_NEORV32_SPI);
-    SysBusDevice *sbd = SYS_BUS_DEVICE(&s->parent_obj);
+    /* Create the SPI controller device properly */
+    DeviceState *dev = qdev_new(TYPE_NEORV32_SPI);
+    SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
 
-    /* Realize the SPI controller (sets up mmio, irq, SSI bus, cs_lines) */
+    /* Realize the SPI controller */
     sysbus_realize_and_unref(sbd, &error_fatal);
 
-    /* Map the MMIO region into the system address space */
+    /* Map MMIO */
     sysbus_mmio_map(sbd, 0, base_addr);
 
-    /* Attach an SPI flash to SPI0 if a drive image is provided */
+    NEORV32SPIState *s = NEORV32_SPI(dev);
+
+    /* Optional: attach an SPI flash if there is an MTD drive */
     DriveInfo *dinfo = drive_get(IF_MTD, 0, 0);
     if (dinfo) {
-        /* Create the flash device and bind the MTD backend */
         DeviceState *flash = qdev_new("n25q512a11");
-        qdev_prop_set_drive_err(flash, "drive",
-                                blk_by_legacy_dinfo(dinfo),
-                                &error_fatal);
+        qdev_prop_set_drive_err(flash, "drive", blk_by_legacy_dinfo(dinfo), &error_fatal);
 
-        /* Realize flash on the same SSI bus created during controller realize */
+        /* Put flash ON THE SAME SPI BUS as our controller */
         qdev_realize_and_unref(flash, BUS(s->bus), &error_fatal);
 
-        /* Retrieve and wire the flash's CS input line to CS0 output */
+        /* Wire master CS[0] to flash's CS input */
         qemu_irq flash_cs = qdev_get_gpio_in_named(flash, SSI_GPIO_CS, 0);
-        sysbus_connect_irq(sbd, 1, flash_cs);
+        qdev_connect_gpio_out_named(DEVICE(s), "cs", 0, flash_cs);
     }
 
     return s;
 }
+
 
