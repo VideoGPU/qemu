@@ -101,6 +101,9 @@ enum NEORV32_SPI_DATA_enum {
 #define NEORV32_SPI_CTRL  0x00
 #define NEORV32_SPI_DATA  0x04
 #define NEORV32_SPI_MMIO_SIZE   0x8  // ctrl + data (8 bytes total)
+/* Various constants */
+#define NEORV32_SPI_MAX_CS_LINES  7
+#define NEORV32_SPI_FIFO_CAPACITY 8
 
 /* Utility functions to get/set bits in ctrl register */
 static inline bool get_ctrl_bit(NEORV32SPIState *s, int bit)
@@ -153,8 +156,8 @@ static void neorv32_spi_update_status(NEORV32SPIState *s)
 /* Update chip select lines based on command-mode CS (active-low on the wire) */
 static void neorv32_spi_update_cs(NEORV32SPIState *s)
 {
-
-    if (!s->cs_lines || s->num_cs <= 0) {
+	/* Check that input valid */
+	if (!s->cs_lines || s->num_cs <= 0) {
         return;
     }
 
@@ -163,14 +166,19 @@ static void neorv32_spi_update_cs(NEORV32SPIState *s)
         qemu_set_irq(s->cs_lines[i], 1);
     }
 
-    /* If command says CS active, assert selected line (low = active) */
+    /* If DATA command says CS active, assert selected line (low = active) */
     if (s->cmd_cs_active) {
-        int cs_idx = MIN(s->current_cs, s->num_cs - 1);
+        int cs_idx = s->current_cs;
+        if (cs_idx < 0 || cs_idx >= s->num_cs) {
+            /* Out of range: keep all deasserted, but warn once per event */
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: CS index %d out of range (num_cs=%d)\n",
+                          __func__, cs_idx, s->num_cs);
+            return;
+        }
+        /* Active-low when enabled */
         qemu_set_irq(s->cs_lines[cs_idx], 0);
     }
 
-//        flash_cs = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
-//        sysbus_connect_irq(SYS_BUS_DEVICE(&s->soc.spi0), 1, flash_cs);
 }
 
 /* Update IRQ based on conditions */
@@ -313,22 +321,29 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
 
     case NEORV32_SPI_DATA:
 	{
-
 		/* If CMD=1, this write is a command, not payload */
 		const bool is_cmd = get_data_bit(value, SPI_DATA_CMD);
 
 		if (is_cmd) {
-			/*
-			 * Command mode:
-			 * - SPI_DATA_CSEN: when set, assert CS (active); when clear, deassert CS.
-			 * - (Optionally: use low bits to select CS index; here we keep s->current_cs as-is.)
-			 */
-			const bool csen = get_data_bit(value, SPI_DATA_CSEN);
-			s->cmd_cs_active = csen;
+	        /*   DATA command format:
+	         *   bit 31: CMD = 1
+	         *   bit  3: CSEN (1=assert CS, 0=deassert All)
+	         *   bits [2:0]: CS index (0..7) when asserting
+	         */
+	        const bool csen = get_data_bit(value, SPI_DATA_CSEN);
+	        const int  cs_index = (int)(value & 0x7);
+
+	        if (csen) {
+	            /* Select and assert a single CS */
+	            s->current_cs    = cs_index;  /* range checking in update_cs() */
+	            s->cmd_cs_active = true;
+	        } else {
+	            /* Deassert all CS lines */
+	            s->cmd_cs_active = false;
+	        }
 
 			/* Drive the wires */
 			neorv32_spi_update_cs(s);
-
 			/* Update status (SPI_CS_ACTIVE is read-only status bit) */
 			neorv32_spi_update_status(s);
 			neorv32_spi_update_irq(s);
@@ -373,12 +388,12 @@ static const MemoryRegionOps neorv32_spi_ops = {
 static void neorv32_spi_init(Object *obj)
 {
     NEORV32SPIState *s = NEORV32_SPI(obj);
-    s->ctrl = 0;
-    s->data = 0;
-    s->fifo_capacity = 8; /* FIFO capacity of 8 bytes */
-    //s->last_rx = 0xFF;
-    //s->cs_index = 0; /* Use CS0 by default */
-    s->num_cs = 1; /* Default to 1 CS line */
+    s->ctrl          = 0;
+    s->data          = 0;
+    s->fifo_capacity = NEORV32_SPI_FIFO_CAPACITY;
+    s->num_cs        = NEORV32_SPI_MAX_CS_LINES; /* Default to 1 CS line */
+    s->cmd_cs_active = false;
+    s->current_cs    = 0; /* Use CS0 by default */
 }
 
 /* Realize the device */
