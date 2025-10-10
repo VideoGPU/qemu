@@ -58,6 +58,9 @@ typedef struct  NEORV32SPIState {
 
     /* FIFO capacity */
     int fifo_capacity;
+    /* Track CS state driven by command writes */
+    bool cmd_cs_active;  /* true = CS asserted (active-low on wire) */
+    int  current_cs;     /* which CS line is active; default 0 for now */
 } NEORV32SPIState;
 
 

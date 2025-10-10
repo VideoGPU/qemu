@@ -63,36 +63,38 @@
 
 
 
-/* SPI control register bits */
+/** SPI control register bits */
 enum NEORV32_SPI_CTRL_enum {
-  SPI_CTRL_EN           =  0, /**< enable SPI unit */
-  SPI_CTRL_CPHA         =  1, /**< clock phase */
-  SPI_CTRL_CPOL         =  2, /**< clock polarity */
-  SPI_CTRL_CS_SEL0      =  3, /**< CS bit 0 */
-  SPI_CTRL_CS_SEL1      =  4, /**< CS bit 1 */
-  SPI_CTRL_CS_SEL2      =  5, /**< CS bit 2 */
-  SPI_CTRL_CS_EN        =  6, /**< CS enable (active low if set) */
-  SPI_CTRL_PRSC0        =  7, /**< prescaler bits... */
-  SPI_CTRL_PRSC1        =  8,
-  SPI_CTRL_PRSC2        =  9,
-  SPI_CTRL_CDIV0        = 10,
-  SPI_CTRL_CDIV1        = 11,
-  SPI_CTRL_CDIV2        = 12,
-  SPI_CTRL_CDIV3        = 13,
+  SPI_CTRL_EN           =  0, /**< SPI control register(0)  (r/w): SPI unit enable */
+  SPI_CTRL_CPHA         =  1, /**< SPI control register(1)  (r/w): Clock phase */
+  SPI_CTRL_CPOL         =  2, /**< SPI control register(2)  (r/w): Clock polarity */
+  SPI_CTRL_PRSC0        =  3, /**< SPI control register(3)  (r/w): Clock prescaler select bit 0 */
+  SPI_CTRL_PRSC1        =  4, /**< SPI control register(4)  (r/w): Clock prescaler select bit 1 */
+  SPI_CTRL_PRSC2        =  5, /**< SPI control register(5)  (r/w): Clock prescaler select bit 2 */
+  SPI_CTRL_CDIV0        =  6, /**< SPI control register(6)  (r/w): Clock divider bit 0 */
+  SPI_CTRL_CDIV1        =  7, /**< SPI control register(7)  (r/w): Clock divider bit 1 */
+  SPI_CTRL_CDIV2        =  8, /**< SPI control register(8)  (r/w): Clock divider bit 2 */
+  SPI_CTRL_CDIV3        =  9, /**< SPI control register(9)  (r/w): Clock divider bit 3 */
 
-  SPI_CTRL_RX_AVAIL     = 16, /**< RX FIFO data available (read-only status) */
-  SPI_CTRL_TX_EMPTY     = 17, /**< TX FIFO empty (read-only status) */
-  SPI_CTRL_TX_NHALF     = 18, /**< TX FIFO not at least half full */
-  SPI_CTRL_TX_FULL      = 19, /**< TX FIFO full (read-only status) */
+  SPI_CTRL_RX_AVAIL     = 16, /**< SPI control register(16) (r/-): RX FIFO data available (RX FIFO not empty) */
+  SPI_CTRL_TX_EMPTY     = 17, /**< SPI control register(17) (r/-): TX FIFO empty */
+  SPI_CTRL_TX_FULL      = 18, /**< SPI control register(18) (r/-): TX FIFO full */
 
-  SPI_CTRL_IRQ_RX_AVAIL = 20, /**< IRQ if RX data available */
-  SPI_CTRL_IRQ_TX_EMPTY = 21, /**< IRQ if TX empty */
-  SPI_CTRL_IRQ_TX_HALF  = 22, /**< IRQ if TX < half full */
+  SPI_CTRL_FIFO_LSB     = 24, /**< SPI control register(24) (r/-): log2(FIFO size), LSB */
+  SPI_CTRL_FIFO_MSB     = 27, /**< SPI control register(27) (r/-): log2(FIFO size), MSB */
 
-  SPI_CTRL_FIFO_LSB     = 23, /**< log2(FIFO size) lsb */
-  SPI_CTRL_FIFO_MSB     = 26, /**< log2(FIFO size) msb */
+  SPI_CS_ACTIVE         = 30, /**< SPI control register(30) (r/-): At least one CS line is active when set */
+  SPI_CTRL_BUSY         = 31  /**< SPI control register(31) (r/-): serial PHY busy or TX FIFO not empty yet */
+};
 
-  SPI_CTRL_BUSY         = 31  /**< SPI busy flag (read-only status) */
+//TODO:
+//Implement NEORV32_SPI_DATA_enum
+/** SPI data register bits */
+enum NEORV32_SPI_DATA_enum {
+  SPI_DATA_LSB  =  0, /**< SPI data register(0)  (r/w): Data byte LSB */
+  SPI_DATA_CSEN =  3, /**< SPI data register(3)  (-/w): Chip select enable (command-mode) */
+  SPI_DATA_MSB  =  7, /**< SPI data register(7)  (r/w): Data byte MSB */
+  SPI_DATA_CMD  = 31  /**< SPI data register(31) (-/w): 1=command, 0=data */
 };
 
 /* Register offsets */
@@ -115,6 +117,11 @@ static inline void set_ctrl_bit(NEORV32SPIState *s, int bit, bool val)
     }
 }
 
+static inline bool get_data_bit(uint32_t v, int bit)
+{
+    return (v >> bit) & 1;
+}
+
 /* Update read-only status bits in CTRL register */
 static void neorv32_spi_update_status(NEORV32SPIState *s)
 {
@@ -127,47 +134,43 @@ static void neorv32_spi_update_status(NEORV32SPIState *s)
     /* TX_FULL: set if TX FIFO full */
     set_ctrl_bit(s, SPI_CTRL_TX_FULL, fifo8_is_full(&s->tx_fifo));
 
-    /* TX_NHALF: set if TX FIFO not at least half full */
-    /* Half full means: #used >= capacity/2. So not half full = #used < capacity/2 */
-    int used = fifo8_num_used(&s->tx_fifo);
-    bool tx_nhalf = (used < (s->fifo_capacity / 2));
-    set_ctrl_bit(s, SPI_CTRL_TX_NHALF, tx_nhalf);
 
     /* BUSY: We'll consider SPI busy if TX FIFO is not empty or currently shifting data.
      * For simplicity, if TX is not empty we say busy.
      */
     bool busy = !fifo8_is_empty(&s->tx_fifo);
     set_ctrl_bit(s, SPI_CTRL_BUSY, busy);
+
+    /* Update CS status */
+    if (s->cmd_cs_active) {
+        s->ctrl |= (1u << SPI_CS_ACTIVE);
+    } else {
+        s->ctrl &= ~(1u << SPI_CS_ACTIVE);
+    }
+
 }
 
-/* Update chip selects according to CS_SEL bits and CS_EN */
+/* Update chip select lines based on command-mode CS (active-low on the wire) */
 static void neorv32_spi_update_cs(NEORV32SPIState *s)
 {
-    if (s->cs_lines && s->num_cs > 0) {
-        /* Determine which CS line is selected */
-        int cs_index = 0;
-        if (get_ctrl_bit(s, SPI_CTRL_CS_SEL1)) {
-            cs_index = 1;
-        }
-        if (get_ctrl_bit(s, SPI_CTRL_CS_SEL2)) {
-            cs_index = 2;
-        }
-        /* If multiple bits are set, last one takes precedence. Adjust logic as needed. */
 
-        /* If CS_EN is set, the selected line is active (low) */
-        bool cs_active = get_ctrl_bit(s, SPI_CTRL_CS_EN);
+    if (!s->cs_lines || s->num_cs <= 0) {
+        return;
+    }
 
-        /* Deactivate all lines first */
-        for (int i = 0; i < s->num_cs; i++) {
-            qemu_set_irq(s->cs_lines[i], 1);  // inactive (high)
-        }
-        if (cs_index < s->num_cs && cs_active) {
-            qemu_set_irq(s->cs_lines[cs_index], 0); // active (low)
-        }
+    /* Deassert all CS lines (inactive = high) */
+    for (int i = 0; i < s->num_cs; i++) {
+        qemu_set_irq(s->cs_lines[i], 1);
+    }
+
+    /* If command says CS active, assert selected line (low = active) */
+    if (s->cmd_cs_active) {
+        int cs_idx = MIN(s->current_cs, s->num_cs - 1);
+        qemu_set_irq(s->cs_lines[cs_idx], 0);
+    }
 
 //        flash_cs = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
 //        sysbus_connect_irq(SYS_BUS_DEVICE(&s->soc.spi0), 1, flash_cs);
-    }
 }
 
 /* Update IRQ based on conditions */
@@ -184,10 +187,10 @@ static void neorv32_spi_update_irq(NEORV32SPIState *s)
      *    if (TX < half full && SPI_CTRL_IRQ_TX_HALF set)
      */
 
-    bool rx_irq = get_ctrl_bit(s, SPI_CTRL_IRQ_RX_AVAIL) && !fifo8_is_empty(&s->rx_fifo);
-    bool tx_empty_irq = get_ctrl_bit(s, SPI_CTRL_IRQ_TX_EMPTY) && fifo8_is_empty(&s->tx_fifo);
+    bool rx_irq = !fifo8_is_empty(&s->rx_fifo);
+    bool tx_empty_irq = fifo8_is_empty(&s->tx_fifo);
     int used = fifo8_num_used(&s->tx_fifo);
-    bool tx_half_irq = get_ctrl_bit(s, SPI_CTRL_IRQ_TX_HALF) && (used < (s->fifo_capacity / 2));
+    bool tx_half_irq = (used < (s->fifo_capacity / 2));
 
     bool irq_level = rx_irq || tx_empty_irq || tx_half_irq;
     qemu_set_irq(s->irq, irq_level ? 1 : 0);
@@ -290,8 +293,7 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
         uint32_t ro_mask = ((1 << SPI_CTRL_BUSY)      |
                             (1 << SPI_CTRL_TX_EMPTY)  |
                             (1 << SPI_CTRL_TX_FULL)   |
-                            (1 << SPI_CTRL_RX_AVAIL)  |
-                            (1 << SPI_CTRL_TX_NHALF));
+                            (1 << SPI_CTRL_RX_AVAIL));
 
         /* FIFO size bits might be hardwired read-only. Assume we do not change them:
          * FIFO size: bits [SPI_CTRL_FIFO_LSB..SPI_CTRL_FIFO_MSB], here assume read-only.
@@ -307,40 +309,56 @@ static void neorv32_spi_write(void *opaque, hwaddr addr,
 
         neorv32_spi_update_cs(s);
         break;
-    }
+    } //NEORV32_SPI_CTRL
 
     case NEORV32_SPI_DATA:
-		{
-			//Debug
-			volatile int a = 0;
-			if (value == 0x4) {
-				a += 1;
-			}else if (value == 0x6) {
-				a += 2;
-			}
-		}
-        /* Writing DATA puts a byte into TX FIFO if not full */
-        if (!fifo8_is_full(&s->tx_fifo)) {
-            uint8_t tx_byte = (uint8_t)value;
+	{
 
-            fifo8_push(&s->tx_fifo, tx_byte);
-            /* After pushing data, flush TX to SPI bus */
-            neorv32_spi_flush_txfifo(s);
-        } else {
-            qemu_log_mask(LOG_GUEST_ERROR, "%s: TX FIFO full, cannot write 0x%x\n",
-                          __func__, value);
-        }
-        break;
+		/* If CMD=1, this write is a command, not payload */
+		const bool is_cmd = get_data_bit(value, SPI_DATA_CMD);
+
+		if (is_cmd) {
+			/*
+			 * Command mode:
+			 * - SPI_DATA_CSEN: when set, assert CS (active); when clear, deassert CS.
+			 * - (Optionally: use low bits to select CS index; here we keep s->current_cs as-is.)
+			 */
+			const bool csen = get_data_bit(value, SPI_DATA_CSEN);
+			s->cmd_cs_active = csen;
+
+			/* Drive the wires */
+			neorv32_spi_update_cs(s);
+
+			/* Update status (SPI_CS_ACTIVE is read-only status bit) */
+			neorv32_spi_update_status(s);
+			neorv32_spi_update_irq(s);
+			break; /* no FIFO push on command */
+		}
+
+		/* Writing DATA puts a byte into TX FIFO if not full */
+		if (!fifo8_is_full(&s->tx_fifo)) {
+			uint8_t tx_byte = (uint8_t)value;
+
+			fifo8_push(&s->tx_fifo, tx_byte);
+			/* After pushing data, flush TX to SPI bus */
+			neorv32_spi_flush_txfifo(s);
+		} else {
+			qemu_log_mask(LOG_GUEST_ERROR, "%s: TX FIFO full, cannot write 0x%x\n",
+						  __func__, value);
+		}
+		break;
+	} //NEORV32_SPI_DATA
 
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: bad write at address 0x%"
                       HWADDR_PRIx " value=0x%x\n", __func__, addr, value);
         break;
-    }
+
+    } //switch (addr)
 
     neorv32_spi_update_status(s);
     neorv32_spi_update_irq(s);
-}
+} //neorv32_spi_write
 
 static const MemoryRegionOps neorv32_spi_ops = {
     .read = neorv32_spi_read,
