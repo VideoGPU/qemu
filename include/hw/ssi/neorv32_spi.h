@@ -19,6 +19,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* Based on NEORV32 Firmware commit 55dd079d */
+
 #ifndef NEORV32_SPI_H
 #define NEORV32_SPI_H
 
