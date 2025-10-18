@@ -32,7 +32,6 @@ typedef struct Neorv32SoCState {
     /*< public >*/
     RISCVHartArrayState cpus;
     DeviceState *plic;
-    MemoryRegion xip_mem;
     MemoryRegion imem_region;
     MemoryRegion bootloader_rom;
 } Neorv32SoCState;
@@ -52,7 +51,6 @@ typedef struct Neorv32State {
 enum {
 	NEORV32_IMEM,
 	NEORV32_BOOTLOADER_ROM,
-	NEORV32_XIP,
 	NEORV32_DMEM,
 	NEORV32_SYSINFO,
 	NEORV32_UART0,

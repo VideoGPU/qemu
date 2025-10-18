@@ -46,7 +46,6 @@ static const MemMapEntry neorv32_memmap[] = {
 
     [NEORV32_IMEM]           = { NEORV32_IMEM_BASE,               SYSINFO_IMEM_SIZE},
     [NEORV32_BOOTLOADER_ROM] = { NEORV32_BOOTLOADER_BASE_ADDRESS, 0x2000},     /* 8K  ROM for bootloader */
-    [NEORV32_XIP]            = { NEORV32_XIP_MEM_BASE_ADDRESS,    0x10000000}, /* 256 MBytes flash */
     [NEORV32_DMEM]           = { NEORV32_DMEM_BASE,               SYSINFO_DMEM_SIZE},
     [NEORV32_SYSINFO]        = { NEORV32_SYSINFO_BASE,            0x100},
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,              0x100},
@@ -182,14 +181,6 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
 
     /* Uart0 */
     neorv32_uart_create(sys_mem, memmap[NEORV32_UART0].base,serial_hd(0));
-
-    /* XIP memory, can be pre-loaded with:
-    * -device loader,file=/home/data.raw,addr=0x10000000
-    */
-        memory_region_init_rom(&s->xip_mem, OBJECT(dev), "riscv.neorv32.xip",
-                           memmap[NEORV32_XIP].size, &error_fatal);
-    memory_region_add_subregion(sys_mem, memmap[NEORV32_XIP].base,
-        &s->xip_mem);
 
     /* SPI controller */
 	NEORV32SPIState *spi = neorv32_spi_create(sys_mem, memmap[NEORV32_SPI0].base);
