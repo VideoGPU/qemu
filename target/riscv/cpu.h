@@ -985,7 +985,7 @@ const char *satp_mode_str(uint8_t satp_mode, bool is_32_bit);
 extern const RISCVCSR th_csr_list[];
 
 /* Implemented in neorv32_csr.c */
-void neorv32_register_xisa_csr(RISCVCPU *cpu);
+extern const RISCVCSR neorv32_csr_list[];
 
 const char *priv_spec_to_str(int priv_version);
 #endif /* RISCV_CPU_H */

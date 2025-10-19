@@ -22,8 +22,6 @@
 
 #define    CSR_MXISA    (0xfc0)
 
-static riscv_csr_operations csr_ops_xisa;
-
 static RISCVException smode(CPURISCVState *env, int csrno)
 {
 	return RISCV_EXCP_NONE;
@@ -37,10 +35,17 @@ static RISCVException read_neorv32_xisa(CPURISCVState *env, int csrno,
     return RISCV_EXCP_NONE;
 }
 
-void neorv32_register_xisa_csr(RISCVCPU *cpu)
+static bool test_neorv32_mvendorid(RISCVCPU *cpu)
 {
-	csr_ops_xisa.name = "neorv32.xisa";
-	csr_ops_xisa.predicate = smode;
-	csr_ops_xisa.read = read_neorv32_xisa;
-	riscv_set_csr_ops(CSR_MXISA, &csr_ops_xisa);
+    return cpu->cfg.mvendorid == NEORV32_VENDOR_ID;
 }
+
+const RISCVCSR neorv32_csr_list[] = {
+    {
+        .csrno = CSR_MXISA,
+        .insertion_test = test_neorv32_mvendorid,
+        .csr_ops = { "neorv32.xisa", smode, read_neorv32_xisa }
+    },
+    { }
+};
+

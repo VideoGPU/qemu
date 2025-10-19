@@ -3048,7 +3048,11 @@ static const TypeInfo riscv_cpu_type_infos[] = {
         .cfg.ext_zifencei = true,
         .cfg.ext_zicsr = true,
         .cfg.pmp = true,
-        .cfg.pmp_regions = 16
+        .cfg.pmp_regions = 16,
+		.cfg.mvendorid = NEORV32_VENDOR_ID,
+#ifndef CONFIG_USER_ONLY
+        .custom_csrs = neorv32_csr_list
+#endif
     ),
 #endif
 
