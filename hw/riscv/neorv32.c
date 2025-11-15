@@ -163,6 +163,8 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
     const MemMapEntry *memmap = neorv32_memmap;
     Neorv32SoCState *s = RISCV_NEORV32_SOC(dev);
     MemoryRegion *sys_mem = get_system_memory();
+    /* TODO: read actual RTL config properties (like SYSINFO_SOC_BOOTLOADER)*/
+    Neorv32SysInfoConfig *sysinfo_cfg = g_new0(Neorv32SysInfoConfig,1);
 
     object_property_set_str(OBJECT(&s->cpus), "cpu-type", ms->cpu_type,
                             &error_abort);
@@ -176,8 +178,14 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         memmap[NEORV32_BOOTLOADER_ROM].base, &s->bootloader_rom);
 
 
-    /* Sysinfo ROM */
-    neorv32_sysinfo_create(sys_mem, memmap[NEORV32_SYSINFO].base);
+	/* Sysinfo ROM */
+    /* TODO: read actual RTL config properties (like SYSINFO_SOC_BOOTLOADER)*/
+	sysinfo_cfg->clk_hz = SYSINFO_CLK_HZ_DEFAULT,
+	sysinfo_cfg->misc   = neorv32_sysinfo_compose_misc_reg(),
+	sysinfo_cfg->soc    = SYSINFO_SOC_VAL,
+	sysinfo_cfg->cache  = neorv32_sysinfo_compose_cache_reg(),
+
+    neorv32_sysinfo_create(sys_mem, memmap[NEORV32_SYSINFO].base,sysinfo_cfg);
 
     /* Uart0 */
     neorv32_uart_create(sys_mem, memmap[NEORV32_UART0].base, serial_hd(0));
