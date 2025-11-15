@@ -28,19 +28,6 @@ bootloader and examples:
 the specific patch series you are using.)
 
 
-QEMU build configuration:
--------------------------
-
-From the command line::
-
-  $ /path/to/qemu/configure \
-  --python=/usr/local/bin/python3.12 \
-  --target-list=riscv32-softmmu \
-  --enable-fdt \
-  --enable-debug \
-  --disable-vnc \
-  --disable-gtk
-
 Boot options
 ------------
 
