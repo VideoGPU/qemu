@@ -9,7 +9,7 @@
 #define HW_NEORV32_SYSINFO_H
 
 #include "system/memory.h"
-
+#include "neorv32_sysinfo_rtl.h"
 
 /* Internal memory sizes (bytes) */
 #define SYSINFO_IMEM_SIZE        0x00008000U  /* 32 KiB IMEM */
@@ -93,5 +93,9 @@ typedef struct Neorv32SysInfoConfig {
 /* MMIO creator */
 void neorv32_sysinfo_create(MemoryRegion *address_space, hwaddr base,
                             const Neorv32SysInfoConfig *cfg);
+/* Compose MISC register per the firmware header */
+uint32_t neorv32_sysinfo_compose_misc_reg(void);
+/* Compose CACHE register per the firmware header */
+uint32_t neorv32_sysinfo_compose_cache_reg(void);
 
 #endif /* HW_NEORV32_SYSINFO_H */

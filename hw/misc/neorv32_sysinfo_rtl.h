@@ -66,7 +66,7 @@ typedef struct __attribute__((packed, aligned(4))) {
 } neorv32_sysinfo_t;
 
 /* SYSINFO module hardware access. */
-#define NEORV32_SYSINFO ((neorv32_sysinfo_t *)(NEORV32_SYSINFO_BASE))
+#define NEORV32_SYSINFO_RTL ((neorv32_sysinfo_t *)(NEORV32_SYSINFO_BASE))
 
 /*
  * NEORV32_SYSINFO.MISC (r/-): Miscellaneous system configurations.

@@ -45,7 +45,7 @@ static unsigned int neorv32_log2u(uint32_t x)
 }
 
 /* Compose MISC register per the firmware header */
-static uint32_t neorv32_sysinfo_build_misc(void)
+uint32_t neorv32_sysinfo_compose_misc_reg(void)
 {
     const uint32_t imem_log2  =
         neorv32_log2u(SYSINFO_IMEM_SIZE) & 0xFFU;  /* Bits [7:0]  */
@@ -71,7 +71,7 @@ static uint32_t neorv32_sysinfo_build_misc(void)
 }
 
 /* Compose CACHE register per the firmware header */
-static uint32_t neorv32_sysinfo_build_cache(void)
+uint32_t neorv32_sysinfo_compose_cache_reg(void)
 {
     uint32_t v = 0U;
     v |= ((ICACHE_BLOCK_SIZE_LOG2 & 0x0FU) << 0);
