@@ -91,7 +91,7 @@ typedef struct Neorv32SysInfoConfig {
 } Neorv32SysInfoConfig;
 
 /* MMIO creator */
-void neorv32_sysinfo_create(MemoryRegion *address_space, hwaddr base
+void neorv32_sysinfo_create(MemoryRegion *address_space, hwaddr base,
                             const Neorv32SysInfoConfig *cfg);
 
 #endif /* HW_NEORV32_SYSINFO_H */

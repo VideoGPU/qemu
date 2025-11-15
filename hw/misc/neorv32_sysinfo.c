@@ -185,7 +185,7 @@ static const MemoryRegionOps neorv32_sysinfo_ops = {
     .valid.max_access_size = 4,
 };
 
-void neorv32_sysinfo_create(MemoryRegion *address_space, hwaddr base
+void neorv32_sysinfo_create(MemoryRegion *address_space, hwaddr base,
                             const Neorv32SysInfoConfig *cfg)
 {
     Neorv32SysInfoState *s = g_new0(Neorv32SysInfoState, 1);
