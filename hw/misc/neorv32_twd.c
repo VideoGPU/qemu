@@ -6,6 +6,7 @@
 #include "qemu/module.h"
 #include "hw/irq.h"
 #include "hw/misc/neorv32_twd.h"
+#include "monitor/qdev.h"
 
 #define TYPE_NEORV32_TWD_I2C_SLAVE "neorv32.twd-i2c-slave"
 OBJECT_DECLARE_SIMPLE_TYPE(Neorv32TWDI2CSlaveState, NEORV32_TWD_I2C_SLAVE)
@@ -618,8 +619,10 @@ Neorv32TWDState *neorv32_twd_create(MemoryRegion *address_space, hwaddr base)
     DeviceState *dev;
     SysBusDevice *sbd;
     bool success;
+    I2CBus *bus;
 
     dev = qdev_new(TYPE_NEORV32_TWD);
+    qdev_set_id(dev, g_strdup("twd"), &error_fatal);
     sbd = SYS_BUS_DEVICE(dev);
     success = sysbus_realize_and_unref(sbd, &error_fatal);
 
@@ -628,6 +631,8 @@ Neorv32TWDState *neorv32_twd_create(MemoryRegion *address_space, hwaddr base)
     }
 
     memory_region_add_subregion(address_space, base, sysbus_mmio_get_region(sbd, 0));
+    bus = i2c_init_bus(dev, "i2c");
+    neorv32_twd_attach_i2c_bus(NEORV32_TWD(dev), bus);
     return NEORV32_TWD(dev);
 }
 

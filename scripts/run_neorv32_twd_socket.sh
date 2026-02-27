@@ -10,7 +10,7 @@ Uses exact default paths for qemu-system-riscv32 and bootloader.
 
 Starts QEMU with:
   -chardev socket,id=twdm,path=/tmp/twd-i2c.sock,server=on,wait=off
-  -device i2c-master-chardev,chardev=twdm,bus=soc.twd-i2c-bus
+  -device i2c-master-chardev,chardev=twdm,bus=i2c
 
 Supports overrides via env vars:
   QEMU_BIN=... BIOS=... TWD_SOCKET=... scripts/run_neorv32_twd_socket.sh
@@ -71,4 +71,4 @@ exec "$QEMU_BIN" \
   -machine neorv32 \
   -bios "$BIOS" \
   -chardev "socket,id=twdm,path=$TWD_SOCKET,server=on,wait=off" \
-  -device i2c-master-chardev,chardev=twdm,bus=soc.twd-i2c-bus
+  -device i2c-master-chardev,chardev=twdm,bus=i2c

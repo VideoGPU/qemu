@@ -94,7 +94,7 @@ Using your regular bootloader command as a base::
       -machine neorv32 \
       -bios /mnt/shonot/fpga_projects/neorv32/sw/bootloader/neorv32_raw_exe.bin \
       -chardev socket,id=twdm,path=/tmp/twd-i2c.sock,server=on,wait=off \
-      -device i2c-master-chardev,chardev=twdm,bus=soc.twd-i2c-bus
+      -device i2c-master-chardev,chardev=twdm,bus=i2c
 
 Then use the helper client script from another shell::
 

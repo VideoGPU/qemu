@@ -196,7 +196,6 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
     const MemMapEntry *memmap = neorv32_memmap;
     Neorv32SoCState *s = RISCV_NEORV32_SOC(dev);
     MemoryRegion *sys_mem = get_system_memory();
-    I2CBus *twd_i2c_bus;
 
     object_property_set_str(OBJECT(&s->cpus), "cpu-type", ms->cpu_type,
                             &error_abort);
@@ -221,9 +220,6 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         error_setg(errp, "TWD is not created");
         return;
     }
-
-    twd_i2c_bus = i2c_init_bus(dev, "twd-i2c-bus");
-    neorv32_twd_attach_i2c_bus(twd, twd_i2c_bus);
 
     sysbus_connect_irq(SYS_BUS_DEVICE(twd), 0,
                        qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)),

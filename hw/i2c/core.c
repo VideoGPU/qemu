@@ -85,8 +85,15 @@ bool i2c_scan_bus(I2CBus *bus, uint8_t address, bool broadcast,
 
     QTAILQ_FOREACH(kid, &bus->qbus.children, sibling) {
         DeviceState *qdev = kid->child;
-        I2CSlave *candidate = I2C_SLAVE(qdev);
-        I2CSlaveClass *sc = I2C_SLAVE_GET_CLASS(candidate);
+        I2CSlave *candidate;
+        I2CSlaveClass *sc;
+
+        if (!object_dynamic_cast(OBJECT(qdev), TYPE_I2C_SLAVE)) {
+            continue;
+        }
+
+        candidate = I2C_SLAVE(qdev);
+        sc = I2C_SLAVE_GET_CLASS(candidate);
 
         if (sc->match_and_add(candidate, address, broadcast, current_devs)) {
             if (!broadcast) {
