@@ -15,10 +15,22 @@ typedef struct Neorv32TWDState {
 
     MemoryRegion mmio;
     qemu_irq irq;
+    qemu_irq sda_out;
 
     uint32_t ctrl;
     Fifo8 rx_fifo;
     Fifo8 tx_fifo;
+
+    uint8_t scl_i;
+    uint8_t sda_i;
+    uint8_t sda_drv;
+    uint8_t bitcnt;
+    uint8_t shift;
+    uint8_t bus_state;
+    bool cmd_read;
+    bool pending_addr_ack;
+    bool pending_data_ack;
+    bool state_busy;
 } Neorv32TWDState;
 
 Neorv32TWDState *neorv32_twd_create(MemoryRegion *address_space, hwaddr base);
