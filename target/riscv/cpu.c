@@ -1048,7 +1048,13 @@ static void riscv_cpu_set_irq(void *opaque, int irq, int level)
             }
             break;
         default:
-            g_assert_not_reached();
+            if (kvm_enabled()) {
+                kvm_riscv_set_irq(cpu, irq, level);
+            } else {
+                /* Generic local interrupts (for custom machine IRQ lines). */
+                riscv_cpu_update_mip(env, 1ULL << irq, BOOL_TO_MASK(level));
+            }
+            break;
         }
     } else if (irq < (IRQ_LOCAL_MAX + IRQ_LOCAL_GUEST_MAX)) {
         /* Require H-extension for handling guest local interrupts */

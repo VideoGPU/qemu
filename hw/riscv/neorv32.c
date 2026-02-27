@@ -33,8 +33,11 @@
 
 #include "hw/riscv/neorv32.h"
 #include "hw/misc/neorv32_sysinfo.h"
+#include "hw/misc/neorv32_twd.h"
 #include "hw/char/neorv32_uart.h"
 #include "hw/ssi/neorv32_spi.h"
+
+#define NEORV32_IRQ_SELF_CHECK 0
 
 /* TODO: get BOOTLOADER_ROM, IMEM, DMEM sizes from rtl auto-generated header */
 static const MemMapEntry neorv32_memmap[] = {
@@ -43,10 +46,30 @@ static const MemMapEntry neorv32_memmap[] = {
     [NEORV32_BOOTLOADER_ROM] = { NEORV32_BOOTLOADER_BASE_ADDRESS, 0x2000},
     [NEORV32_DMEM]           = { NEORV32_DMEM_BASE,    SYSINFO_DMEM_SIZE},
     [NEORV32_SYSINFO]        = { NEORV32_SYSINFO_BASE, 0x100},
-    [NEORV32_TWD]            = { NEORV32_TWD_BASE,     0x100},
+    [NEORV32_TWD_MMIO]       = { NEORV32_TWD_BASE,     0x100},
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,   0x100},
     [NEORV32_SPI0]           = { NEORV32_SPI_BASE,     0x100},
 };
+
+#if NEORV32_IRQ_SELF_CHECK
+static void neorv32_check_irq_lines(Neorv32SoCState *s)
+{
+    if (!s->irq_connected_uart0) {
+        error_report("NEORV32 IRQ self-check failed: UART0 IRQ is not connected");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!s->irq_connected_spi0) {
+        error_report("NEORV32 IRQ self-check failed: SPI0 IRQ is not connected");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!s->irq_connected_twd) {
+        error_report("NEORV32 IRQ self-check failed: TWD IRQ is not connected");
+        exit(EXIT_FAILURE);
+    }
+}
+#endif
 
 static void neorv32_machine_init(MachineState *machine)
 {
@@ -95,6 +118,10 @@ static void neorv32_machine_init(MachineState *machine)
     }
 
     /* Neorv32 bootloader */
+#if NEORV32_IRQ_SELF_CHECK
+    neorv32_check_irq_lines(&s->soc);
+#endif
+
     if (machine->firmware) {
         riscv_find_and_load_firmware(machine, machine->firmware,
                                      &start_addr, NULL);
@@ -156,6 +183,10 @@ static void neorv32_soc_init(Object *obj)
     object_property_set_int(OBJECT(&s->cpus), "resetvec",
                             NEORV32_BOOTLOADER_BASE_ADDRESS, &error_abort);
 
+    s->irq_connected_twd = false;
+    s->irq_connected_uart0 = false;
+    s->irq_connected_spi0 = false;
+
 }
 
 static void neorv32_soc_realize(DeviceState *dev, Error **errp)
@@ -180,8 +211,34 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
     /* Sysinfo ROM */
     neorv32_sysinfo_create(sys_mem, memmap[NEORV32_SYSINFO].base);
 
+    /* TWD controller */
+    Neorv32TWDState *twd = neorv32_twd_create(sys_mem,
+                                              memmap[NEORV32_TWD_MMIO].base);
+
+    if (!twd) {
+        error_setg(errp, "TWD is not created");
+        return;
+    }
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(twd), 0,
+                       qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)),
+                                        NEORV32_FIRQ_TWD));
+    s->irq_connected_twd = true;
+
     /* Uart0 */
-    neorv32_uart_create(sys_mem, memmap[NEORV32_UART0].base, serial_hd(0));
+    Neorv32UARTState *uart0 = neorv32_uart_create(sys_mem,
+                                                  memmap[NEORV32_UART0].base,
+                                                  serial_hd(0));
+
+    if (!uart0) {
+        error_setg(errp, "UART0 is not created");
+        return;
+    }
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(uart0), 0,
+                       qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)),
+                                        NEORV32_FIRQ_UART0));
+    s->irq_connected_uart0 = true;
 
     /* SPI controller */
     NEORV32SPIState *spi = neorv32_spi_create(sys_mem,
@@ -191,6 +248,11 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         error_setg(errp, "SPI is not created");
         return;
     }
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(spi), 0,
+                       qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)),
+                                        NEORV32_FIRQ_SPI));
+    s->irq_connected_spi0 = true;
 }
 
 static void neorv32_soc_class_init(ObjectClass *oc, const void *data)
