@@ -133,6 +133,7 @@ config NEORV32
     bool
     default y
     depends on RISCV32
+    select I2C_MASTER_CHARDEV
     select NEORV32_TWD
     select NEORV32_UART
     select NEORV32_SPI

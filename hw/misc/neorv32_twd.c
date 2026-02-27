@@ -7,6 +7,14 @@
 #include "hw/irq.h"
 #include "hw/misc/neorv32_twd.h"
 
+#define TYPE_NEORV32_TWD_I2C_SLAVE "neorv32.twd-i2c-slave"
+OBJECT_DECLARE_SIMPLE_TYPE(Neorv32TWDI2CSlaveState, NEORV32_TWD_I2C_SLAVE)
+
+typedef struct Neorv32TWDI2CSlaveState {
+    I2CSlave parent_obj;
+    Neorv32TWDState *twd;
+} Neorv32TWDI2CSlaveState;
+
 #define NEORV32_TWD_MMIO_SIZE 0x8
 
 #define NEORV32_TWD_RX_FIFO_CAPACITY 16
@@ -34,6 +42,80 @@ typedef enum Neorv32TWDBusState {
 
 static void neorv32_twd_update_irq(Neorv32TWDState *s);
 static void neorv32_twd_update_ctrl_status(Neorv32TWDState *s);
+static inline bool twd_enabled(Neorv32TWDState *s);
+
+static int neorv32_twd_i2c_send(I2CSlave *slave, uint8_t data)
+{
+    Neorv32TWDI2CSlaveState *bridge = NEORV32_TWD_I2C_SLAVE(slave);
+    Neorv32TWDState *s = bridge->twd;
+
+    if (!twd_enabled(s) || fifo8_is_full(&s->rx_fifo)) {
+        return 1;
+    }
+
+    fifo8_push(&s->rx_fifo, data);
+    neorv32_twd_update_ctrl_status(s);
+    neorv32_twd_update_irq(s);
+    return 0;
+}
+
+static uint8_t neorv32_twd_i2c_recv(I2CSlave *slave)
+{
+    Neorv32TWDI2CSlaveState *bridge = NEORV32_TWD_I2C_SLAVE(slave);
+    Neorv32TWDState *s = bridge->twd;
+    uint8_t data = 0xff;
+
+    if (twd_enabled(s) && !fifo8_is_empty(&s->tx_fifo)) {
+        data = fifo8_pop(&s->tx_fifo);
+    }
+
+    neorv32_twd_update_ctrl_status(s);
+    neorv32_twd_update_irq(s);
+    return data;
+}
+
+static int neorv32_twd_i2c_event(I2CSlave *slave, enum i2c_event event)
+{
+    Neorv32TWDI2CSlaveState *bridge = NEORV32_TWD_I2C_SLAVE(slave);
+    Neorv32TWDState *s = bridge->twd;
+
+    switch (event) {
+    case I2C_START_RECV:
+    case I2C_START_SEND:
+    case I2C_START_SEND_ASYNC:
+        if (!twd_enabled(s)) {
+            return 1;
+        }
+        s->state_busy = true;
+        break;
+    case I2C_FINISH:
+    case I2C_NACK:
+        s->state_busy = false;
+        break;
+    default:
+        break;
+    }
+
+    neorv32_twd_update_ctrl_status(s);
+    neorv32_twd_update_irq(s);
+    return 0;
+}
+
+static void neorv32_twd_i2c_slave_class_init(ObjectClass *oc, const void *data)
+{
+    I2CSlaveClass *k = I2C_SLAVE_CLASS(oc);
+
+    k->send = neorv32_twd_i2c_send;
+    k->recv = neorv32_twd_i2c_recv;
+    k->event = neorv32_twd_i2c_event;
+}
+
+static const TypeInfo neorv32_twd_i2c_slave_type_info = {
+    .name = TYPE_NEORV32_TWD_I2C_SLAVE,
+    .parent = TYPE_I2C_SLAVE,
+    .instance_size = sizeof(Neorv32TWDI2CSlaveState),
+    .class_init = neorv32_twd_i2c_slave_class_init,
+};
 
 enum NEORV32_TWD_CTRL_BITS {
     TWD_CTRL_EN           = 0,
@@ -420,6 +502,10 @@ static void neorv32_twd_write(void *opaque, hwaddr addr,
 
         s->ctrl = (s->ctrl & ~rw_mask) | (val & rw_mask);
 
+        if (s->i2c_slave) {
+            i2c_slave_set_address(s->i2c_slave, twd_device_addr(s));
+        }
+
         if (!twd_get_bit(s->ctrl, TWD_CTRL_EN) || clr_rx) {
             fifo8_reset(&s->rx_fifo);
         }
@@ -522,6 +608,7 @@ static const TypeInfo neorv32_twd_type_info = {
 static void neorv32_twd_register_types(void)
 {
     type_register_static(&neorv32_twd_type_info);
+    type_register_static(&neorv32_twd_i2c_slave_type_info);
 }
 
 type_init(neorv32_twd_register_types)
@@ -542,4 +629,21 @@ Neorv32TWDState *neorv32_twd_create(MemoryRegion *address_space, hwaddr base)
 
     memory_region_add_subregion(address_space, base, sysbus_mmio_get_region(sbd, 0));
     return NEORV32_TWD(dev);
+}
+
+void neorv32_twd_attach_i2c_bus(Neorv32TWDState *s, I2CBus *bus)
+{
+    DeviceState *dev;
+    Neorv32TWDI2CSlaveState *bridge;
+
+    if (!bus || s->i2c_slave) {
+        return;
+    }
+
+    dev = qdev_new(TYPE_NEORV32_TWD_I2C_SLAVE);
+    bridge = NEORV32_TWD_I2C_SLAVE(dev);
+    bridge->twd = s;
+    i2c_slave_set_address(I2C_SLAVE(dev), twd_device_addr(s));
+    i2c_slave_realize_and_unref(I2C_SLAVE(dev), bus, &error_fatal);
+    s->i2c_slave = I2C_SLAVE(dev);
 }
