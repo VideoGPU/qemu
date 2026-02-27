@@ -12,8 +12,11 @@
 
 
 /* Internal memory sizes (bytes) */
-#define SYSINFO_IMEM_SIZE        0x00008000U  /* 32 KiB IMEM */
-#define SYSINFO_DMEM_SIZE        0x00008000U  /* 32 KiB DMEM */
+//#define SYSINFO_IMEM_SIZE        0x00008000U  /* 32 KiB IMEM */
+//#define SYSINFO_DMEM_SIZE        0x00008000U  /* 32 KiB DMEM */
+#define SYSINFO_IMEM_SIZE        0x03200000U /* 51 MByte */
+#define SYSINFO_DMEM_SIZE        0x03200000U /* 51 MByte */
+
 
 /* Number of harts (physical cores) */
 #define SYSINFO_NUM_HARTS        1U
