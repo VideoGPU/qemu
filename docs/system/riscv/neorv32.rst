@@ -80,6 +80,47 @@ Notes:
   located at the 4 MiB offset of the flash image.
 * If you prefer, you can use ``-serial stdio`` instead of ``-nographic``.
 
+Host-driven TWD testing (Python over socket)
+--------------------------------------------
+
+For interactive host-to-firmware testing via the emulated TWD path, run QEMU
+with a socket chardev and attach the ``i2c-master-chardev`` helper device on
+the NEORV32 internal TWD I2C bus.
+
+Using your regular bootloader command as a base::
+
+  $ /home/smishash/shonot/sources/qemu/build/qemu-system-riscv32 \
+      -nographic \
+      -machine neorv32 \
+      -bios /mnt/shonot/fpga_projects/neorv32/sw/bootloader/neorv32_raw_exe.bin \
+      -chardev socket,id=twdm,path=/tmp/twd-i2c.sock,server=on,wait=off \
+      -device i2c-master-chardev,chardev=twdm,bus=soc.twd-i2c-bus
+
+Then use the helper client script from another shell::
+
+  $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock
+
+Command format supported by the helper:
+
+* Write bytes to an I2C address::
+
+    W 0x52 03 11 22 33
+
+* Read ``N`` bytes from an I2C address::
+
+    R 0x52 04
+
+Response format from QEMU:
+
+* ``OK`` for successful write
+* ``D xx xx ...`` for read data
+* ``ERR ...`` for malformed command / NACK / other transfer error
+
+One-shot client mode (non-interactive) is also available::
+
+  $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "W 0x52 03 11 22 33"
+  $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "R 0x52 04"
+
 Machine-specific options
 ------------------------
 
