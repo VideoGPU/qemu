@@ -45,7 +45,9 @@
       SYSINFO_SOC_ENABLE(SYSINFO_SOC_IMEM)       | \
       SYSINFO_SOC_ENABLE(SYSINFO_SOC_DMEM)       | \
       SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_UART0)   | \
-      SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_SPI))
+      SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_SPI)     | \
+      SYSINFO_SOC_ENABLE(SYSINFO_SOC_IO_TWD))
+
 
 /*
  * -------------------------------------------------------------------------

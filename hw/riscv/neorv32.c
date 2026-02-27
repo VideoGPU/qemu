@@ -43,6 +43,7 @@ static const MemMapEntry neorv32_memmap[] = {
     [NEORV32_BOOTLOADER_ROM] = { NEORV32_BOOTLOADER_BASE_ADDRESS, 0x2000},
     [NEORV32_DMEM]           = { NEORV32_DMEM_BASE,    SYSINFO_DMEM_SIZE},
     [NEORV32_SYSINFO]        = { NEORV32_SYSINFO_BASE, 0x100},
+    [NEORV32_TWD]            = { NEORV32_TWD_BASE,     0x100},
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,   0x100},
     [NEORV32_SPI0]           = { NEORV32_SPI_BASE,     0x100},
 };
