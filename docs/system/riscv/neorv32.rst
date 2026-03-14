@@ -102,13 +102,19 @@ Then use the helper client script from another shell::
 
 Command format supported by the helper:
 
-* Write bytes to an I2C address::
+* Write bytes to an I2C address (``W <addr> <count> <data...>``)::
 
-    W 0x52 03 11 22 33
+  W 0x52 3 0x11 0x22 0x33
 
 * Read ``N`` bytes from an I2C address::
 
     R 0x52 04
+
+Notes:
+
+* The write command requires an explicit byte count.
+* Numeric arguments are parsed with C-style base auto-detection.
+  Use explicit ``0x`` prefixes for data bytes if you want hexadecimal values.
 
 Response format from QEMU:
 
@@ -118,7 +124,7 @@ Response format from QEMU:
 
 One-shot client mode (non-interactive) is also available::
 
-  $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "W 0x52 03 11 22 33"
+  $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "W 0x52 3 0x11 0x22 0x33"
   $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "R 0x52 04"
 
 Machine-specific options
