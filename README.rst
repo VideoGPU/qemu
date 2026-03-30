@@ -41,6 +41,9 @@ current development version that is available at
 folder in the source tree, and is built by `Sphinx
 <https://www.sphinx-doc.org/en/master/>`_.
 
+For a comprehensive overview of QEMU's architecture, codebase structure,
+and major subsystems, see ``ARCHITECTURE.md`` in the root directory.
+
 
 Building
 ========
