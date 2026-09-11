@@ -409,3 +409,9 @@ ivshmem_flat_interrupt_peer(uint16_t peer_id, uint16_t vector_id) "Interrupting 
 i2c_echo_event(const char *id, const char *event) "%s: %s"
 i2c_echo_recv(const char *id, uint8_t data) "%s: recv 0x%02" PRIx8
 i2c_echo_send(const char *id, uint8_t data) "%s: send 0x%02" PRIx8
+
+# neorv32_mipi_tx.c
+neorv32_mipi_tx_read(uint64_t addr, uint32_t val) "addr 0x%" PRIx64 " val 0x%" PRIx32
+neorv32_mipi_tx_write(uint64_t addr, uint32_t val) "addr 0x%" PRIx64 " val 0x%" PRIx32
+neorv32_mipi_tx_frame_start(uint16_t bytes_per_line, uint16_t lines, uint32_t lanes, uint64_t duration_ns) "%u bytes/line, %u lines, %u lanes, %" PRIu64 " ns"
+neorv32_mipi_tx_frame_done(uint16_t frame_number) "frame %u"

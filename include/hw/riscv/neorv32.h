@@ -31,6 +31,7 @@ typedef struct Neorv32SoCState {
     bool irq_connected_twd;
     bool irq_connected_uart0;
     bool irq_connected_spi0;
+    bool irq_connected_mipi_tx;
 } Neorv32SoCState;
 
 typedef struct Neorv32State {
@@ -53,6 +54,7 @@ enum {
     NEORV32_TWD_MMIO,
     NEORV32_UART0,
     NEORV32_SPI0,
+    NEORV32_MIPI_TX_MMIO,
 };
 
 /*

@@ -245,4 +245,7 @@ config NEORV32_SYSINFO_QEMU
 
 config NEORV32_TWD
     bool
+
+config NEORV32_MIPI_TX
+    bool
 source macio/Kconfig
