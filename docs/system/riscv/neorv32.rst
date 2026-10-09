@@ -151,6 +151,29 @@ One-shot client mode (non-interactive) is also available::
   $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "W 0x52 3 0x11 0x22 0x33"
   $ python3 scripts/neorv32_twd_client.py --socket /tmp/twd-i2c.sock --cmd "R 0x52 04"
 
+TWD register model
+~~~~~~~~~~~~~~~~~~
+
+The TWD (``0xFFEA0000``, interrupt on FIRQ0) follows
+``rtl/core/neorv32_twd.vhd`` and ``sw/lib/include/neorv32_twd.h``:
+
+* ``CTRL`` bits 11..16 enable the RX-available, RX-full, TX-empty,
+  TX-not-full, communication-begin and communication-end interrupts; bits
+  17..20 and 21..24 report log2 of the RX and TX FIFO depth (16 entries
+  each); bits 25..28 are the FIFO status flags.
+* ``COM_BEG`` (bit 29) is set when the TWD ACKs its address, ``COM_END``
+  (bit 30) when that transfer ends. Both are write-1-to-clear: writing a
+  ``CTRL`` value with the bit cleared leaves the flag set. ``COM`` (bit 31)
+  is high during the transfer. Disabling the TWD clears both flags.
+* A master read sends the TX FIFO head and pops it only when the master
+  ACKs it, so the byte a master NACKs (the last one of a read) is sent again
+  by the next read. An empty TX FIFO sends ``0xFF``.
+* There is no clock stretching and no read/write indication for software:
+  data a master reads has to be in the TX FIFO before the transfer starts.
+* With ``i2c-master-chardev`` every command is one complete transfer, executed
+  without the CPU running in between. Writes longer than the RX FIFO are
+  NACKed after 16 bytes, and reads beyond the TX FIFO return ``0xFF``.
+
 MIPI CSI-2 TX IP (``neorv32.mipi-tx``)
 --------------------------------------
 

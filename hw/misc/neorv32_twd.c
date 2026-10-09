@@ -1,4 +1,12 @@
-/* Neorv32 Two-Wire Device (TWD) */
+/*
+ * Neorv32 Two-Wire Device (TWD)
+ *
+ * Models rtl/core/neorv32_twd.vhd: CTRL layout, COM_BEG / COM_END
+ * (write-1-to-clear) and COM, the six interrupt sources, and the TX FIFO
+ * read semantics: the FIFO head is sent and only popped when the master ACKs
+ * it, so the byte a master NACKs stays at the head; an empty TX FIFO sends
+ * 0xFF. There is no clock stretching and no R/W indication to software.
+ */
 
 #include "qemu/osdep.h"
 #include "qapi/error.h"
@@ -45,6 +53,42 @@ static void neorv32_twd_update_irq(Neorv32TWDState *s);
 static void neorv32_twd_update_ctrl_status(Neorv32TWDState *s);
 static inline bool twd_enabled(Neorv32TWDState *s);
 
+static void neorv32_twd_com_begin(Neorv32TWDState *s)
+{
+    s->state_busy = true;
+    s->com_beg = true;
+    s->tx_pending = false;
+}
+
+static void neorv32_twd_com_finish(Neorv32TWDState *s)
+{
+    if (s->state_busy) {
+        s->com_end = true;
+    }
+    s->state_busy = false;
+    s->tx_pending = false;
+}
+
+/* The master ACKed the byte at the TX FIFO head: pop it. */
+static void neorv32_twd_tx_acked(Neorv32TWDState *s)
+{
+    if (s->tx_pending && !fifo8_is_empty(&s->tx_fifo)) {
+        fifo8_pop(&s->tx_fifo);
+    }
+    s->tx_pending = false;
+}
+
+/* Byte to send next: the TX FIFO head (not popped yet) or 0xFF. */
+static uint8_t neorv32_twd_tx_present(Neorv32TWDState *s)
+{
+    if (fifo8_is_empty(&s->tx_fifo)) {
+        s->tx_pending = false;
+        return 0xFF;
+    }
+    s->tx_pending = true;
+    return fifo8_peek(&s->tx_fifo);
+}
+
 static int neorv32_twd_i2c_send(I2CSlave *slave, uint8_t data)
 {
     Neorv32TWDI2CSlaveState *bridge = NEORV32_TWD_I2C_SLAVE(slave);
@@ -66,8 +110,10 @@ static uint8_t neorv32_twd_i2c_recv(I2CSlave *slave)
     Neorv32TWDState *s = bridge->twd;
     uint8_t data = 0xff;
 
-    if (twd_enabled(s) && !fifo8_is_empty(&s->tx_fifo)) {
-        data = fifo8_pop(&s->tx_fifo);
+    /* Another byte requested: the master ACKed the previous one. */
+    neorv32_twd_tx_acked(s);
+    if (twd_enabled(s)) {
+        data = neorv32_twd_tx_present(s);
     }
 
     neorv32_twd_update_ctrl_status(s);
@@ -87,11 +133,15 @@ static int neorv32_twd_i2c_event(I2CSlave *slave, enum i2c_event event)
         if (!twd_enabled(s)) {
             return 1;
         }
-        s->state_busy = true;
+        /* address ACK; a repeated start begins a new communication too */
+        neorv32_twd_com_begin(s);
+        break;
+    case I2C_NACK:
+        /* the master NACKed the last byte read: it stays in the TX FIFO */
+        s->tx_pending = false;
         break;
     case I2C_FINISH:
-    case I2C_NACK:
-        s->state_busy = false;
+        neorv32_twd_com_finish(s);
         break;
     default:
         break;
@@ -128,20 +178,29 @@ enum NEORV32_TWD_CTRL_BITS {
     TWD_CTRL_IRQ_RX_AVAIL = 11,
     TWD_CTRL_IRQ_RX_FULL  = 12,
     TWD_CTRL_IRQ_TX_EMPTY = 13,
+    TWD_CTRL_IRQ_TX_NFULL = 14,
+    TWD_CTRL_IRQ_COM_BEG  = 15,
+    TWD_CTRL_IRQ_COM_END  = 16,
 
-    TWD_CTRL_RX_FIFO_LSB  = 16,
-    TWD_CTRL_RX_FIFO_MSB  = 19,
-    TWD_CTRL_TX_FIFO_LSB  = 20,
-    TWD_CTRL_TX_FIFO_MSB  = 23,
+    TWD_CTRL_RX_FIFO_LSB  = 17,
+    TWD_CTRL_RX_FIFO_MSB  = 20,
+    TWD_CTRL_TX_FIFO_LSB  = 21,
+    TWD_CTRL_TX_FIFO_MSB  = 24,
 
     TWD_CTRL_RX_AVAIL     = 25,
     TWD_CTRL_RX_FULL      = 26,
     TWD_CTRL_TX_EMPTY     = 27,
     TWD_CTRL_TX_FULL      = 28,
-    TWD_CTRL_SENSE_SCL    = 29,
-    TWD_CTRL_SENSE_SDA    = 30,
-    TWD_CTRL_BUSY         = 31,
+    TWD_CTRL_COM_BEG      = 29,
+    TWD_CTRL_COM_END      = 30,
+    TWD_CTRL_COM          = 31,
 };
+
+/* Read/write configuration bits of CTRL; everything else is status. */
+#define TWD_CTRL_RW_MASK \
+    ((1U << TWD_CTRL_EN) | (1U << TWD_CTRL_FSEL) | \
+     (0x7FU << TWD_CTRL_DEV_ADDR0) | \
+     (0x3FU << TWD_CTRL_IRQ_RX_AVAIL))
 
 static inline bool twd_get_bit(uint32_t v, unsigned int bit)
 {
@@ -193,7 +252,7 @@ static void neorv32_twd_bus_reset(Neorv32TWDState *s)
     s->cmd_read = false;
     s->pending_addr_ack = false;
     s->pending_data_ack = false;
-    s->state_busy = false;
+    neorv32_twd_com_finish(s);
     twd_set_bus_state(s, TWD_BUS_IDLE);
     neorv32_twd_drive_sda(s, 1);
 }
@@ -203,18 +262,6 @@ static void neorv32_twd_push_rx(Neorv32TWDState *s, uint8_t value)
     if (!fifo8_is_full(&s->rx_fifo)) {
         fifo8_push(&s->rx_fifo, value);
     }
-}
-
-static uint8_t neorv32_twd_peek_or_dummy_tx(Neorv32TWDState *s)
-{
-    uint8_t value;
-
-    if (fifo8_is_empty(&s->tx_fifo)) {
-        return 0xFF;
-    }
-
-    value = fifo8_pop(&s->tx_fifo);
-    return value;
 }
 
 static void neorv32_twd_handle_start(Neorv32TWDState *s)
@@ -228,7 +275,7 @@ static void neorv32_twd_handle_start(Neorv32TWDState *s)
     s->cmd_read = false;
     s->pending_addr_ack = false;
     s->pending_data_ack = false;
-    s->state_busy = true;
+    s->tx_pending = false;
     twd_set_bus_state(s, TWD_BUS_ADDR);
     neorv32_twd_drive_sda(s, 1);
 }
@@ -263,6 +310,7 @@ static void neorv32_twd_line_step(Neorv32TWDState *s, bool scl_rise, bool scl_fa
                 s->cmd_read = s->shift & 0x1U;
                 if (addr == twd_device_addr(s)) {
                     s->pending_addr_ack = true;
+                    neorv32_twd_com_begin(s);
                     twd_set_bus_state(s, TWD_BUS_ADDR_ACK);
                 } else {
                     neorv32_twd_bus_reset(s);
@@ -282,7 +330,7 @@ static void neorv32_twd_line_step(Neorv32TWDState *s, bool scl_rise, bool scl_fa
             s->pending_addr_ack = false;
             s->bitcnt = 0;
             if (s->cmd_read) {
-                s->shift = neorv32_twd_peek_or_dummy_tx(s);
+                s->shift = neorv32_twd_tx_present(s);
                 twd_set_bus_state(s, TWD_BUS_TX);
                 neorv32_twd_drive_sda(s, (s->shift & 0x80U) ? 1 : 0);
             } else {
@@ -337,7 +385,8 @@ static void neorv32_twd_line_step(Neorv32TWDState *s, bool scl_rise, bool scl_fa
     case TWD_BUS_TX_ACK:
         if (scl_rise) {
             if (s->sda_i == 0) {
-                s->shift = neorv32_twd_peek_or_dummy_tx(s);
+                neorv32_twd_tx_acked(s);
+                s->shift = neorv32_twd_tx_present(s);
                 twd_set_bus_state(s, TWD_BUS_TX);
                 neorv32_twd_drive_sda(s, (s->shift & 0x80U) ? 1 : 0);
             } else {
@@ -393,7 +442,11 @@ static void neorv32_twd_update_irq(Neorv32TWDState *s)
     bool level = enabled && (
         (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_RX_AVAIL) && rx_avail) ||
         (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_RX_FULL) && rx_full) ||
-        (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_TX_EMPTY) && tx_empty)
+        (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_TX_EMPTY) && tx_empty) ||
+        (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_TX_NFULL) &&
+         !fifo8_is_full(&s->tx_fifo)) ||
+        (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_COM_BEG) && s->com_beg) ||
+        (twd_get_bit(s->ctrl, TWD_CTRL_IRQ_COM_END) && s->com_end)
     );
 
     qemu_set_irq(s->irq, level ? 1 : 0);
@@ -425,17 +478,17 @@ static void neorv32_twd_update_ctrl_status(Neorv32TWDState *s)
         ro |= (1U << TWD_CTRL_TX_FULL);
     }
 
-    if (s->scl_i) {
-        ro |= (1U << TWD_CTRL_SENSE_SCL);
+    if (s->com_beg) {
+        ro |= (1U << TWD_CTRL_COM_BEG);
     }
-    if (s->sda_i) {
-        ro |= (1U << TWD_CTRL_SENSE_SDA);
+    if (s->com_end) {
+        ro |= (1U << TWD_CTRL_COM_END);
     }
     if (s->state_busy) {
-        ro |= (1U << TWD_CTRL_BUSY);
+        ro |= (1U << TWD_CTRL_COM);
     }
 
-    s->ctrl &= 0x00003ff9U;
+    s->ctrl &= TWD_CTRL_RW_MASK;
     s->ctrl |= ro;
 }
 
@@ -489,19 +542,18 @@ static void neorv32_twd_write(void *opaque, hwaddr addr,
 
     switch (addr) {
     case NEORV32_TWD_CTRL: {
-        uint32_t rw_mask =
-            (1U << TWD_CTRL_EN) |
-            (1U << TWD_CTRL_FSEL) |
-            (((1U << (TWD_CTRL_DEV_ADDR6 - TWD_CTRL_DEV_ADDR0 + 1)) - 1)
-             << TWD_CTRL_DEV_ADDR0) |
-            (1U << TWD_CTRL_IRQ_RX_AVAIL) |
-            (1U << TWD_CTRL_IRQ_RX_FULL) |
-            (1U << TWD_CTRL_IRQ_TX_EMPTY);
-
         bool clr_rx = twd_get_bit(val, TWD_CTRL_CLR_RX);
         bool clr_tx = twd_get_bit(val, TWD_CTRL_CLR_TX);
 
-        s->ctrl = (s->ctrl & ~rw_mask) | (val & rw_mask);
+        s->ctrl = (s->ctrl & ~TWD_CTRL_RW_MASK) | (val & TWD_CTRL_RW_MASK);
+
+        /* COM_BEG / COM_END are write-1-to-clear */
+        if (twd_get_bit(val, TWD_CTRL_COM_BEG)) {
+            s->com_beg = false;
+        }
+        if (twd_get_bit(val, TWD_CTRL_COM_END)) {
+            s->com_end = false;
+        }
 
         if (s->i2c_slave) {
             i2c_slave_set_address(s->i2c_slave, twd_device_addr(s));
@@ -517,6 +569,8 @@ static void neorv32_twd_write(void *opaque, hwaddr addr,
 
         if (!twd_get_bit(s->ctrl, TWD_CTRL_EN)) {
             neorv32_twd_bus_reset(s);
+            s->com_beg = false;
+            s->com_end = false;
         }
 
         break;
@@ -557,6 +611,8 @@ static void neorv32_twd_reset(DeviceState *dev)
     s->scl_i = 1;
     s->sda_i = 1;
     neorv32_twd_bus_reset(s);
+    s->com_beg = false;
+    s->com_end = false;
 
     neorv32_twd_update_ctrl_status(s);
     neorv32_twd_update_irq(s);

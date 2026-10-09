@@ -31,7 +31,10 @@ typedef struct Neorv32TWDState {
     bool cmd_read;
     bool pending_addr_ack;
     bool pending_data_ack;
-    bool state_busy;
+    bool state_busy;    /* CTRL.COM: addressed transfer in progress */
+    bool com_beg;       /* CTRL.COM_BEG, set on address ACK, write-1-to-clear */
+    bool com_end;       /* CTRL.COM_END, set at the end of an addressed transfer */
+    bool tx_pending;    /* TX FIFO head was sent, waiting for the master's ACK */
     I2CSlave *i2c_slave;
 } Neorv32TWDState;
 
