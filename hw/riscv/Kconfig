@@ -139,3 +139,4 @@ config NEORV32
     select NEORV32_SPI
     select NEORV32_SYSINFO_QEMU
     select NEORV32_MIPI_TX
+    select RISCV_ACLINT

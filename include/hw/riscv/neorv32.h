@@ -55,6 +55,7 @@ enum {
     NEORV32_UART0,
     NEORV32_SPI0,
     NEORV32_MIPI_TX_MMIO,
+    NEORV32_CLINT,
 };
 
 /*

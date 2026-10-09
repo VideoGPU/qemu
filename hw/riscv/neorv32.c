@@ -8,6 +8,7 @@
  * 2) DMEM
  * 3) UART
  * 4) SPI
+ * 5) CLINT (SiFive-compatible MSWI + MTIMER)
  *
  * Copyright (c) 2025 Michael Levit
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -55,6 +56,7 @@ static const MemMapEntry neorv32_memmap[] = {
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,   0x100},
     [NEORV32_SPI0]           = { NEORV32_SPI_BASE,     0x100},
     [NEORV32_MIPI_TX_MMIO]   = { NEORV32_MIPI_TX_BASE, 0x100},
+    [NEORV32_CLINT]          = { NEORV32_MTIME_BASE,   0x10000},
 };
 
 #if NEORV32_IRQ_SELF_CHECK
@@ -220,6 +222,20 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
     memory_region_add_subregion(sys_mem,
         memmap[NEORV32_BOOTLOADER_ROM].base, &s->bootloader_rom);
 
+
+    /*
+     * CLINT (rtl/core/neorv32_clint.vhd): SiFive-compatible layout,
+     * MSWI at +0x0000, MTIMECMP at +0x4000, MTIME at +0xBFF8. MTIME counts
+     * at the core clock and also drives the time/timeh CSRs.
+     */
+    riscv_aclint_swi_create(memmap[NEORV32_CLINT].base, 0, ms->smp.cpus,
+                            false);
+    riscv_aclint_mtimer_create(memmap[NEORV32_CLINT].base +
+                                   RISCV_ACLINT_SWI_SIZE,
+                               RISCV_ACLINT_DEFAULT_MTIMER_SIZE, 0,
+                               ms->smp.cpus, RISCV_ACLINT_DEFAULT_MTIMECMP,
+                               RISCV_ACLINT_DEFAULT_MTIME,
+                               SYSINFO_CLK_HZ_DEFAULT, true);
 
     /* Sysinfo ROM */
     neorv32_sysinfo_create(sys_mem, memmap[NEORV32_SYSINFO].base);
