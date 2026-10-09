@@ -10,6 +10,7 @@
 #include "cpu_vendorid.h"
 
 #define    CSR_MXISA    (0xfc0)
+#define    CSR_MXISAH   (0xfc1)
 
 static RISCVException smode(CPURISCVState *env, int csrno)
 {
@@ -34,6 +35,11 @@ const RISCVCSR neorv32_csr_list[] = {
         .csrno = CSR_MXISA,
         .insertion_test = test_neorv32_mvendorid,
         .csr_ops = { "neorv32.xisa", smode, read_neorv32_xisa }
+    },
+    {
+        .csrno = CSR_MXISAH,
+        .insertion_test = test_neorv32_mvendorid,
+        .csr_ops = { "neorv32.xisah", smode, read_neorv32_xisa }
     },
     { }
 };
