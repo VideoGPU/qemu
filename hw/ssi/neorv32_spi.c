@@ -412,8 +412,8 @@ static void neorv32_spi_realize(DeviceState *dev, Error **errp)
     }
 }
 
-/* Device properties can be added if needed. For now, none. */
-static Property neorv32_spi_properties[] = {
+/* Number of chip-select lines driven by the controller. */
+static const Property neorv32_spi_properties[] = {
     DEFINE_PROP_UINT32("num-cs", NEORV32SPIState, num_cs, 1),
 };
 

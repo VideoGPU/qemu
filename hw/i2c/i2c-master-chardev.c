@@ -205,7 +205,7 @@ static void i2c_master_chardev_realize(DeviceState *dev, Error **errp)
                              true);
 }
 
-static Property i2c_master_chardev_properties[] = {
+static const Property i2c_master_chardev_properties[] = {
     DEFINE_PROP_CHR("chardev", I2CMasterChardevState, chr),
 };
 

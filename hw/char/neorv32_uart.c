@@ -18,7 +18,7 @@
 
 #define NEORV32_UART_IO_REGION_SIZE  (32)
 
-static Property neorv32_uart_properties[] = {
+static const Property neorv32_uart_properties[] = {
     DEFINE_PROP_CHR("chardev", Neorv32UARTState, chr),
 };
 
