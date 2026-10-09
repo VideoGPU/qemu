@@ -24,7 +24,14 @@ bootloader and examples:
   guest via QEMU's ``if=mtd`` backend).
 * TWD (two-wire device) I2C slave on an internal I2C bus.
 * MIPI CSI-2 TX AXI4-Lite IP on the external bus (XBUS).
-* Basic timer/CLINT-like facilities required by the example software.
+* CLINT at ``0xFFF40000`` (SiFive-compatible layout: MSWI ``+0x0000``,
+  MTIMECMP ``+0x4000``, MTIME ``+0xBFF8``). MTIME counts at the SYSINFO core
+  clock (100 MHz), drives the ``time``/``timeh`` CSRs and raises the machine
+  timer interrupt (``mip.MTIP``, bit 7). It is the system timer used by
+  Zephyr's ``riscv,machine-timer`` driver. SYSINFO reports it as
+  ``IO_CLINT``.
+* The CPU implements the RISC-V privileged specification 1.12
+  (``mcountinhibit``, ``menvcfg``, Zicntr), matching the RTL.
 
 (Exact register maps and optional peripherals depend on the QEMU version and
 the specific patch series you are using.)
@@ -43,12 +50,27 @@ From the command line::
   --disable-vnc \
   --disable-gtk
 
+``--enable-debug`` is optional; it is only needed for debugging QEMU itself.
+Release (optimised) builds are supported as well.
+
 Boot options
 ------------
 
 Typical usage is to boot the NEORV32 bootloader as the QEMU ``-bios`` image,
 and to provide a raw SPI flash image via an MTD drive. The bootloader will
 then jump to the application image placed at the configured flash offset.
+
+Because SYSINFO reports the CLINT, the stock bootloader first runs its
+auto-boot countdown (``AUTO_BOOT_TIMEOUT``, 8 s by default) and prints
+``Press any key to abort.``; any key on the console drops to the bootloader
+prompt, otherwise it loads the executable from SPI flash when the countdown
+expires.
+
+The executable header written by ``image_gen`` must match the bootloader
+build: current NEORV32 trees write the ``NEO!`` header
+(``image_gen -t exe -b 0x00000000``), older bootloaders expect the legacy
+header and reject newer images with ``ERROR_SIGNATURE``. Always take the
+bootloader and ``image_gen`` from the same NEORV32 revision.
 
 Preparing the SPI flash with a “Hello World” example
 ----------------------------------------------------
