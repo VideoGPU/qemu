@@ -37,6 +37,8 @@
 #include "hw/misc/neorv32_sysinfo.h"
 #include "hw/misc/neorv32_twd.h"
 #include "hw/misc/neorv32_mipi_tx.h"
+#include "hw/misc/neorv32_i2c_target.h"
+#include "hw/or-irq.h"
 #include "hw/char/neorv32_uart.h"
 #include "hw/ssi/neorv32_spi.h"
 
@@ -44,6 +46,8 @@
 
 /* External AXI4-Lite IP on the XBUS, see NEORV32_MIPI_TX_BASE in neorv32.h */
 #define NEORV32_MIPI_TX_BASE 0x44A00000
+/* Multi-address I2C target IP on the XBUS (i2c_target_ip) */
+#define NEORV32_I2C_TARGET_BASE 0x44A10000
 
 /* TODO: get BOOTLOADER_ROM, IMEM, DMEM sizes from rtl auto-generated header */
 static const MemMapEntry neorv32_memmap[] = {
@@ -56,6 +60,8 @@ static const MemMapEntry neorv32_memmap[] = {
     [NEORV32_UART0]          = { NEORV32_UART0_BASE,   0x100},
     [NEORV32_SPI0]           = { NEORV32_SPI_BASE,     0x100},
     [NEORV32_MIPI_TX_MMIO]   = { NEORV32_MIPI_TX_BASE, 0x100},
+    [NEORV32_I2C_TARGET_MMIO] = { NEORV32_I2C_TARGET_BASE,
+                                  NEORV32_I2C_TARGET_MMIO_SIZE},
     [NEORV32_CLINT]          = { NEORV32_MTIME_BASE,   0x10000},
 };
 
@@ -80,6 +86,12 @@ static void neorv32_check_irq_lines(Neorv32SoCState *s)
     if (!s->irq_connected_mipi_tx) {
         error_report("NEORV32 IRQ self-check failed: "
                      "MIPI TX IRQ is not connected");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!s->irq_connected_i2c_target) {
+        error_report("NEORV32 IRQ self-check failed: "
+                     "I2C target IRQ is not connected");
         exit(EXIT_FAILURE);
     }
 }
@@ -201,6 +213,7 @@ static void neorv32_soc_init(Object *obj)
     s->irq_connected_uart0 = false;
     s->irq_connected_spi0 = false;
     s->irq_connected_mipi_tx = false;
+    s->irq_connected_i2c_target = false;
 
 }
 
@@ -292,9 +305,32 @@ static void neorv32_soc_realize(DeviceState *dev, Error **errp)
         return;
     }
 
-    sysbus_connect_irq(SYS_BUS_DEVICE(mipi_tx), 0,
-                       qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)), IRQ_M_EXT));
+    /*
+     * The XBUS IPs share the machine external interrupt (mie bit 11), as in
+     * test_axi_integration: MIPI TX irq | I2C target irq -> irq_mei_i.
+     */
+    DeviceState *mei_or = qdev_new(TYPE_OR_IRQ);
+    object_property_set_int(OBJECT(mei_or), "num-lines", 2, &error_fatal);
+    qdev_realize_and_unref(mei_or, NULL, &error_fatal);
+    qdev_connect_gpio_out(mei_or, 0,
+                          qdev_get_gpio_in(DEVICE(qemu_get_cpu(0)), IRQ_M_EXT));
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(mipi_tx), 0, qdev_get_gpio_in(mei_or, 0));
     s->irq_connected_mipi_tx = true;
+
+    /* Multi-address I2C target with clock stretching, on the TWD's I2C bus */
+    I2CBus *i2c = I2C_BUS(qdev_get_child_bus(DEVICE(twd), "i2c"));
+    Neorv32I2CTargetState *i2c_target =
+        neorv32_i2c_target_create(sys_mem,
+                                  memmap[NEORV32_I2C_TARGET_MMIO].base, i2c);
+
+    if (!i2c_target) {
+        error_setg(errp, "I2C target is not created");
+        return;
+    }
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c_target), 0,
+                       qdev_get_gpio_in(mei_or, 1));
+    s->irq_connected_i2c_target = true;
 }
 
 static void neorv32_soc_class_init(ObjectClass *oc, const void *data)

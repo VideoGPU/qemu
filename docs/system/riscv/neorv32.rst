@@ -23,7 +23,9 @@ bootloader and examples:
 * SPI controller connected to an emulated SPI NOR flash (exposed to the
   guest via QEMU's ``if=mtd`` backend).
 * TWD (two-wire device) I2C slave on an internal I2C bus.
-* MIPI CSI-2 TX AXI4-Lite IP on the external bus (XBUS).
+* MIPI CSI-2 TX AXI4-Lite IP on the external bus (XBUS), at ``0x44A00000``.
+* Multi-address I2C target with clock stretching (``neorv32.i2c-target``) on
+  the XBUS at ``0x44A10000``, attached to the same I2C bus as the TWD.
 * CLINT at ``0xFFF40000`` (SiFive-compatible layout: MSWI ``+0x0000``,
   MTIMECMP ``+0x4000``, MTIME ``+0xBFF8``). MTIME counts at the SYSINFO core
   clock (100 MHz), drives the ``time``/``timeh`` CSRs and raises the machine
@@ -134,6 +136,11 @@ Command format supported by the helper:
 
     R 0x52 04
 
+* Write ``NW`` bytes, then repeated START and read ``NR`` bytes
+  (``WR <addr> <nw> <data...> <nr>``), e.g. a 16-bit register read::
+
+    WR 0x36 2 0x30 0x0a 2
+
 Notes:
 
 * The write command requires an explicit byte count.
@@ -142,9 +149,24 @@ Notes:
 
 Response format from QEMU:
 
-* ``OK`` for successful write
+* ``OK`` for successful write (and ``WR`` with ``NR`` = 0)
 * ``D xx xx ...`` for read data
-* ``ERR ...`` for malformed command / NACK / other transfer error
+* ``ERR address NACK``, ``ERR data NACK``, ``ERR timeout`` or ``ERR <syntax>``
+
+The transfer runs byte by byte. A target implementing the
+``TYPE_I2C_TARGET_STRETCH`` interface (``include/hw/i2c/i2c_stretch.h``) may
+hold SCL low before a byte; the master then waits on a virtual-clock timer so
+the guest keeps running, and fails the command with ``ERR timeout`` after
+``stretch-timeout-ms`` (default 1000). With ``bus-hz`` greater than 0 every
+byte additionally takes 9 bit times of virtual time; the default 0 runs a
+transfer that no target stretches in one go, as before. Commands received
+while a transfer is running are queued::
+
+  -device i2c-master-chardev,chardev=twdm,bus=i2c,bus-hz=400000,stretch-timeout-ms=500
+
+When the address changes in a ``WR`` command the master issues STOP + START
+instead of a repeated START, because the QEMU I2C core keeps the device
+matched at the first START.
 
 One-shot client mode (non-interactive) is also available::
 
@@ -221,6 +243,52 @@ be polled, which is what ``demo_mipi_tx`` does by default.
 Frame transmission is modelled with a virtual-clock timer whose duration is
 derived from the programmed geometry, lane count and D-PHY timing registers.
 
+Multi-address I2C target (``neorv32.i2c-target``)
+-------------------------------------------------
+
+The machine instantiates the ``i2c_target_axi_ip`` IP
+(``videogpu:user:i2c_target_axi_ip:1.0``) as an XBUS slave at ``0x44A10000``
+(4 KiB). Its I2C side is a child device on the TWD's ``i2c`` bus, so the TWD
+and the IP share one bus as they share the SCL/SDA pins on the FPGA (enable
+only one of them for a given address). The interrupt is level-high and is
+ORed with the MIPI TX interrupt onto the machine external interrupt
+(``mip.MEIP``).
+
+Register map (32-bit accesses only)::
+
+  0x00  ID               0x49324354 ("I2CT")
+  0x04  VERSION          0x00010000
+  0x08  CONFIG    (RO)   slots, event and TX FIFO depth
+  0x0C  CTRL             [0] enable  [1] ACK_CTRL  [2] soft reset
+  0x10  STATUS    (RO)   [0] busy  [1] addressed  [2] rw  [6:4] slot
+                         [7] stretching  [8] tx wait  [9] ack wait
+                         [21:16] event level  [28:24] TX level
+  0x14  IRQ_STATUS       [0] event pending (live)  [1] watchdog
+                         [2] TX overflow  [3] event drop; write 1 to clear
+  0x18  IRQ_ENABLE
+  0x1C  EVENT     (RO)   pops one event; [31] valid, [27:24] type
+                         (1 START, 2 RX, 3 TXREQ, 4 STOP, 5 WDOG),
+                         [18:16] slot, [15] rw, [14] repeated START,
+                         [13] ACK needed, [12:8] flushed bytes, [7:0] data
+  0x20  TX_DATA   (WO)   push a byte to send
+  0x24  TX_CTRL   (WO)   [0] flush  [1] ACK  [2] NACK
+  0x28  FILTER_CYCLES / 0x2C SDA_HOLD_CYCLES / 0x30 SETUP_CYCLES
+  0x34  STRETCH_TIMEOUT  watchdog, in 100 MHz cycles (0 = off)
+  0x38  STRETCH_MAX      longest stretch seen, in cycles; a write clears it
+  0x40 + 4n  SLOTn       [6:0] address  [31] enable  (n = 0..7)
+
+Before a read byte with an empty TX FIFO the target queues one ``TXREQ``
+event and stretches SCL until software writes ``TX_DATA``. Before a write
+byte it stretches while fewer than 4 event FIFO entries are free; in
+``ACK_CTRL`` mode it stretches in the ACK slot until ``TX_CTRL`` ACK or NACK.
+The watchdog ends a stretch after ``STRETCH_TIMEOUT``: the pending read byte
+is sent as ``0xFF`` and a ``WDOG`` event is queued. The TX FIFO is flushed at
+every START. The glitch filter and SDA hold/setup timing are not modelled.
+
+Stretching is only visible to a stretch-aware master such as
+``i2c-master-chardev``; run QEMU with ``-icount`` if the watchdog has to be
+independent of host load.
+
 Capturing the generated CSI-2 stream
 ------------------------------------
 
@@ -274,4 +342,7 @@ sync sequences, per-lane distribution) is not modelled. The colorbar payload
 in the dump file reproduces the RTL's 75% colorbar and its per-frame overlay
 scroll, but the band widths follow the programmed line length instead of the
 RTL's compile-time ``PIXELS_PER_LINE_MAX`` generic.
+
+For the I2C target, a repeated START to a different address is modelled as
+STOP + START by ``i2c-master-chardev`` (see above).
 

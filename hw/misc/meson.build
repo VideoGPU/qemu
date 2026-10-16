@@ -37,6 +37,7 @@ system_ss.add(when: 'CONFIG_SIFIVE_U_PRCI', if_true: files('sifive_u_prci.c'))
 system_ss.add(when: 'CONFIG_NEORV32_SYSINFO_QEMU', if_true: files('neorv32_sysinfo.c'))
 system_ss.add(when: 'CONFIG_NEORV32_TWD', if_true: files('neorv32_twd.c'))
 system_ss.add(when: 'CONFIG_NEORV32_MIPI_TX', if_true: files('neorv32_mipi_tx.c'))
+system_ss.add(when: 'CONFIG_NEORV32_I2C_TARGET', if_true: files('neorv32_i2c_target.c'))
 
 subdir('macio')
 

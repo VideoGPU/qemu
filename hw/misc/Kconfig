@@ -248,4 +248,8 @@ config NEORV32_TWD
 
 config NEORV32_MIPI_TX
     bool
+
+config NEORV32_I2C_TARGET
+    bool
+    select I2C
 source macio/Kconfig
