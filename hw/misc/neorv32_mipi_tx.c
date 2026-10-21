@@ -11,6 +11,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/crc-ccitt.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
 #include "qemu/timer.h"
@@ -166,21 +167,15 @@ static uint8_t neorv32_mipi_tx_header_ecc(uint32_t header24)
     return ecc;
 }
 
+/*
+ * CSI-2 payload CRC-16: x^16 + x^12 + x^5 + 1 processed LSB first (the
+ * reflected 0x8408 table of crc_ccitt()), seed 0xffff, no final XOR. The
+ * CSI-2 specification example payload FF 00 00 02 B9 DC F3 72 BB D4 B8 5A C8
+ * 75 C2 7C 81 F8 05 DF FF 00 00 01 gives 0x00f0.
+ */
 static uint16_t neorv32_mipi_tx_crc16(const uint8_t *data, size_t len)
 {
-    uint16_t crc = 0xffff;
-    size_t i;
-    int b;
-
-    for (i = 0; i < len; i++) {
-        crc ^= (uint16_t)data[i] << 8;
-        for (b = 0; b < 8; b++) {
-            crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021)
-                                 : (uint16_t)(crc << 1);
-        }
-    }
-
-    return crc;
+    return crc_ccitt(0xffff, data, len);
 }
 
 static void neorv32_mipi_tx_dump_header(Neorv32MipiTxState *s, uint32_t dt,

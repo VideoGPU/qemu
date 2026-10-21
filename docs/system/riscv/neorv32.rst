@@ -302,8 +302,9 @@ has to be used::
       -global driver=neorv32.mipi-tx,property=dumpfile,value=/tmp/mipi_tx.bin
 
 The file contains back-to-back CSI-2 packets: a Frame Start short packet, one
-long packet per line (4-byte header with ECC, payload, 2-byte CRC) and a Frame
-End short packet. It can be fed directly to the ``mipi_decoder`` tooling::
+long packet per line (4-byte header with ECC, payload, 2-byte CSI-2 payload
+CRC, computed LSB first) and a Frame End short packet. It can be fed directly
+to the ``mipi_decoder`` tooling::
 
   $ mipi-decoder decode /tmp/mipi_tx.bin --frame-summary
   $ mipi-decoder decode /tmp/mipi_tx.bin --export-raw10-png-dir /tmp/frames
